@@ -30,6 +30,14 @@
 
 ## 설치와 실행
 
+파워쉘 이나 터미널에서 아래처럼 입력. (git 은 설치되어 있어야 합니다.)
+```
+PS C:\Windows\System32> cd c:\
+PS C:\> git clone https://github.com/langpeu/yolo_finger
+PS C:\> cd C:\yolo_finger\
+PS C:\yolo_finger> .\1_web.bat
+```
+
 1. 이 저장소를 내려받아 **`C:\yolo_finger`처럼 C 드라이브 바로 아래**에 두세요.
    `문서`, `바탕 화면` 폴더는 윈도우 보안(제어된 폴더 액세스)이 설치를 막을 수 있어요.
 2. **`1_web.bat`** 을 더블클릭하세요.
