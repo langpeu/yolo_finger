@@ -20,7 +20,7 @@
    SIGN_FAKE_CAM=1 SIGN_NO_BROWSER=1 SIGN_PORT=8775 python3 app/web_app.py
    ```
    Playwright(설치돼 있음)로 페이지를 열어 확인한다. 테스트 뒤 클론에 생긴 `data/` 는 지운다.
-4. **커밋**: 메시지 끝에 그 세션이 알려 주는 attribution 줄을 붙여 `main` 에 push.
+4. **커밋**: 작성자는 `Langpeu <8281485+langpeu@users.noreply.github.com>` (`git config user.name/user.email`). Co-Authored-By·Claude-Session 같은 Claude 표시 줄은 붙이지 않는다 (사용자 요청). `main` 에 push.
 5. 사용자에게 결과를 한국어로 짧게 알리고, 웹페이지를 고쳤으면 Ctrl+F5 또는 `1_web.bat` 재실행을 안내한다.
 
 ### 사용자 응답 방식
@@ -36,6 +36,7 @@
 
 ### 최근에 한 일
 - 종료 버튼: 탭 자동 닫기(window.close) 삭제, 끝 화면 유지, 열린 탭 모두 끝 화면. 탭 잠금 기능은 오작동해서 삭제. 종료 규칙을 고정 규칙으로 문서화.
+- 커밋 작성자를 Langpeu(GitHub noreply 주소)로 바꾸고 Claude 공동 작성자 표시를 지움 (기록 다시 쓰고 강제 푸시).
 - GitHub 공개(AGPL-3.0), 폴더 정리, Langpeu 로고·이름 표기, 클립·단어 즉시 삭제.
 
 ## 꼭 지킬 규칙
@@ -118,5 +119,6 @@ README.md "종료 규칙"이 정한 방식을 유지한다. 사용자가 직접 
 
 ## 배포·확인 방법
 - 사용자 PC 폴더: `C:\yolo_finger` (그래픽카드 RTX 4080 FE).
-- 고친 파일은 PC에 복사한 뒤 md5로 확인하고, 커밋 메시지 끝에 attribution 줄을 넣어 `main` 에 push 한다.
+- 고친 파일은 PC에 복사한 뒤 md5로 확인하고, Langpeu 작성자로 커밋해 `main` 에 push 한다 (Claude 표시 줄 없음).
+- device_commit_files 에 같은 stagedPath를 다시 쓰면 예전 내용이 들어갈 수 있다. 매번 새 경로로 복사하고 md5를 확인한다.
 - 웹페이지를 고쳤으면 사용자에게 Ctrl+F5나 `1_web.bat` 재실행을 안내한다.
