@@ -1,0 +1,6 @@
+# Installed by setup.bat into yolo_env (PyTorch is installed separately for the PC's GPU)
+ultralytics==8.4.199
+mediapipe==1.2.0
+opencv-python==5.0.0.93
+pillow==13.0.0
+numpy==2.5.4

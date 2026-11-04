@@ -1,0 +1,32 @@
+# Python environment for each PC (made by 0_setup.bat / 1_web.bat)
+env_*/
+yolo_env*/
+.venv/
+
+# your recordings, trained model, word list, settings, training history
+data/
+
+# downloaded model files (downloaded again automatically)
+models/*
+!models/.gitkeep
+
+# python cache
+__pycache__/
+*.pyc
+
+# older layout (in case an old copy is opened)
+sign_data/
+sign_trash/
+sign_model.pt
+train_history.json
+words.json
+settings.json
+*.task
+yolo11n*.pt
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
