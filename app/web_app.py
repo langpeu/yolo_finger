@@ -548,7 +548,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def shutdown_app():
-    """종료 button: stop training, release the webcam, then exit (1_web.bat closes its window on EXIT_FROM_WEB)"""
+    """종료 button: stop training, release the webcam, then exit (1_web.bat closes its window on EXIT_FROM_WEB)
+
+    [종료 규칙 - 바꾸지 말 것] exit code 99 = 1_web.bat closes the window. See README.md "종료 규칙".
+    """
     time.sleep(0.4)                      # let the HTTP answer reach the browser first
     print('Shutting down (종료 button)...', flush=True)
     TRAIN['stop'] = True
