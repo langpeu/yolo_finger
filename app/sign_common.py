@@ -56,6 +56,36 @@ WORD_ID_RE = re.compile(r'^[a-z0-9_]{1,32}$')
 CLIP_RE = re.compile(r'^([0-9]{6,20}\.(npz|npy)|[a-z0-9-]{2,24}__[0-9a-f]{16}\.npz)$')
 CONTRIB_RE = re.compile(r'^[a-z0-9-]{2,24}$')
 
+# ---------------------------------------------------------------- Windows: keep full speed when the window is covered
+def keep_full_speed():
+    """Windows 11 slows down a program whose window is hidden behind others (e.g. the browser maximized over the
+    black window): power-saving 'EcoQoS' cores and coarse timers. Opt this process out of that."""
+    if os.name != 'nt':
+        return 'not Windows'
+    import ctypes
+    from ctypes import wintypes
+    done = []
+    try:
+        class PowerThrottling(ctypes.Structure):
+            _fields_ = [('Version', wintypes.ULONG), ('ControlMask', wintypes.ULONG), ('StateMask', wintypes.ULONG)]
+        k32 = ctypes.WinDLL('kernel32', use_last_error=True)
+        k32.GetCurrentProcess.restype = wintypes.HANDLE
+        k32.SetProcessInformation.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+        k32.SetProcessInformation.restype = wintypes.BOOL
+        # ProcessPowerThrottling = 4; EXECUTION_SPEED 0x1 | IGNORE_TIMER_RESOLUTION 0x4 controlled, state 0 = off
+        st = PowerThrottling(1, 0x1 | 0x4, 0)
+        if k32.SetProcessInformation(k32.GetCurrentProcess(), 4, ctypes.byref(st), ctypes.sizeof(st)):
+            done.append('power throttling off')
+        k32.SetPriorityClass.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        if k32.SetPriorityClass(k32.GetCurrentProcess(), 0x8000):     # ABOVE_NORMAL_PRIORITY_CLASS
+            done.append('priority above normal')
+        if ctypes.WinDLL('winmm').timeBeginPeriod(1) == 0:
+            done.append('timer 1 ms')
+    except Exception as e:  # noqa: BLE001
+        done.append(f'failed: {e}')
+    return ', '.join(done) or 'no change'
+
+
 # ---------------------------------------------------------------- settings
 DEFAULT_SETTINGS = {
     'window_sec': 4.0,     # length the model looks at (longest sign must fit)

@@ -611,6 +611,7 @@ def shutdown_app():
 
 
 def main():
+    print('speed: ' + sc.keep_full_speed(), flush=True)   # stay fast when the browser covers this window
     port = int(os.environ.get('SIGN_PORT', '8000'))
     srv = None
     for p in range(port, port + 10):
