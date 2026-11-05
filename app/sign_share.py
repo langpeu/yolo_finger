@@ -198,8 +198,6 @@ def export_zip():
             if vid is None:
                 continue
             for f in sc.clip_files(w['id']):
-                if not f.endswith('.npz'):
-                    continue
                 owner = sc.clip_contributor(f) or me
                 try:
                     seq, sec = sc.load_clip(w['id'], f)
