@@ -68,6 +68,10 @@ def _hash(seq):
 _HASH_CACHE = {}      # (word, file) -> content hash; clips never change after saving
 
 
+def clear_cache():
+    _HASH_CACHE.clear()
+
+
 def clip_hash(word_id, fname):
     k = (word_id, fname)
     if k not in _HASH_CACHE:

@@ -55,6 +55,7 @@
 - 개발 플랜 문서: https://claude.ai/artifact/3CXA1qF5YrKkWZig9ruREg
 
 ### 최근에 한 일
+- 전체 초기화 버튼(단어·클립 탭 맨 아래, "초기화" 입력해야 활성): `sc.reset_dataset()` 이 clips·words.json·sign_model.pt·train_history.json·deleted_clips.json 삭제, contributor.json·settings.json 유지. POST `/api/reset {confirm:'초기화'}`, 학습 중엔 거부.
 - 개인 단어 ID 충돌: 개인 단어 = (만든 사람 origin, 원래 ID base). 같은 것끼리만 합치고, ID만 같은 다른 사람 단어는 들어온 순서대로 `base_01`, `base_02` 로 새로 추가 (이름 = `원래이름 (만든사람ID)`). words.json 에 origin·base·orig_name 저장, manifest 개인 단어에 origin·base·원래 이름.
 - 단어 추가: 공유 단어 50개를 눌러 추가(ID·이름·길이 고정, 이미 추가한 건 ✓). 개인 단어는 공유 ID·별칭(cups)·none·이미 있는 ID와 겹치면 막음. 단어 목록에 공유/개인 표시. GET `/api/vocab`, POST `/api/words/add {vocab}`.
 - 내보내기를 단어·클립의 전체 단어(개인 단어 포함, none 포함)로 바꿈. manifest words 에 name·record_sec·shared. 합칠 때 개인 단어는 같은 ID에 넣고 없으면 보낸 이름으로 추가.
@@ -116,7 +117,7 @@ README.md "종료 규칙"이 정한 방식을 유지한다. 사용자가 직접 
 ## 웹 API (web_app.py)
 - GET: `/`, `/logo.png`, `/favicon.png`, `/frame.jpg?after=N` (한 장씩, 헤더 X-Frame-Id), `/api/state`, `/api/words`, `/api/clips`, `/api/clip`, `/api/train`, `/api/history`, `/api/settings`
 - 데이터 공유: GET `/api/share`(현황), GET `/api/export?consent=1`(zip 내려받기), POST `/api/merge?name=` (본문 = zip 바이트), POST `/api/share/id`, `/api/share/remove`, `/api/share/unblock`, `/api/share/forget`
-- POST: `/api/words/add|update|delete`, `/api/clips/delete` (`{'deleted': n}`), `/api/record/start|stop`, `/api/mode`, `/api/train/start|stop`, `/api/settings`, `/api/shutdown`
+- POST: `/api/reset`, `/api/words/add|update|delete`, `/api/clips/delete` (`{'deleted': n}`), `/api/record/start|stop`, `/api/mode`, `/api/train/start|stop`, `/api/settings`, `/api/shutdown`
 - 영상은 MJPEG 스트림 대신 `/frame.jpg` 를 한 장씩 가져온다 (브라우저의 사이트당 연결 6개 제한 때문). 탭이 안 보이면 멈춘다. 클라이언트 fetch에는 타임아웃이 있다.
 - 테스트용 환경 변수: `SIGN_FAKE_CAM=1`(웹캠·모델 없이), `SIGN_NO_BROWSER=1`, `SIGN_PORT`.
 

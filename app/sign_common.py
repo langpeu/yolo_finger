@@ -265,6 +265,20 @@ def delete_word(word_id):
     save_words([w for w in words if w['id'] != word_id])
 
 
+def reset_dataset():
+    """전체 초기화: deletes every clip, the word list (back to the defaults), the trained model, the training history
+    and the deleted-clip list right away (cannot be undone). Keeps the temporary ID and the settings."""
+    n = sum(len(fs) for _, _, fs in os.walk(DATA_DIR))
+    if os.path.isdir(DATA_DIR):
+        shutil.rmtree(DATA_DIR)
+    os.makedirs(DATA_DIR, exist_ok=True)
+    for p in (WORDS_PATH, MODEL_PATH, HISTORY_PATH, DELETED_PATH):
+        if os.path.exists(p):
+            os.remove(p)
+    load_words()                       # writes the default word list again
+    return n
+
+
 def labels_ko():
     return {w['id']: w['name'] for w in load_words()}
 

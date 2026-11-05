@@ -498,6 +498,22 @@ class Handler(BaseHTTPRequestHandler):
             b = self._json_body()
             if u.path == '/api/share/id':
                 return self._send(200, {'me': sign_share.set_my_id(b.get('id'))})
+            if u.path == '/api/reset':
+                if b.get('confirm') != '초기화':
+                    raise ValueError('확인 칸에 "초기화"라고 입력해 주세요.')
+                if TRAIN['running']:
+                    raise ValueError('학습 중에는 초기화할 수 없어요. 학습을 중지한 뒤 다시 해 주세요.')
+                W.stop_record()
+                with W.lock:
+                    W.rec.update(recent=[], last=None)
+                n = sc.reset_dataset()
+                with _RATIO_LOCK:
+                    _RATIO_CACHE.clear()
+                sign_share.clear_cache()
+                W.refresh_words()
+                W.reload_model()
+                print(f'dataset reset: {n} clip files deleted (temporary ID and settings kept)', flush=True)
+                return self._send(200, {'deleted': n})
             if u.path == '/api/share/unblock':
                 sign_share.unblock(b.get('contributor'))
                 return self._send(200, {'ok': True})
