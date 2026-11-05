@@ -203,7 +203,7 @@ def vocab_alias():
     return out
 
 
-def add_word(word_id, name, record_sec, shared=False):
+def add_word(word_id, name, record_sec, shared=False, extra=None):
     """shared=False: a personal word - its ID must not be one of the shared 50 (or their aliases)"""
     word_id = (word_id or '').strip().lower()
     name = (name or '').strip()
@@ -219,7 +219,7 @@ def add_word(word_id, name, record_sec, shared=False):
     if any(w['id'] == word_id for w in words):
         raise ValueError(f'이미 있는 ID예요: {word_id}')
     sec = min(max(float(record_sec), 0.5), 10.0)
-    words.append({'id': word_id, 'name': name, 'record_sec': sec})
+    words.append({'id': word_id, 'name': name, 'record_sec': sec, **(extra or {})})
     save_words(words)
     os.makedirs(os.path.join(DATA_DIR, word_id), exist_ok=True)
     return words

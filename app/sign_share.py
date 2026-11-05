@@ -192,6 +192,9 @@ def export_zip():
             vid = alias.get(w['id']) or w['id']       # shared words go out under their shared ID
             winfo[vid] = {'name': by_id[vid]['name'] if vid in by_id else w['name'],
                           'record_sec': w.get('record_sec', 3.0), 'shared': vid in by_id}
+            if vid not in by_id:      # personal word: who made it + its original ID identify it everywhere
+                winfo[vid].update(origin=w.get('origin') or me, base=w.get('base') or w['id'],
+                                  name=w.get('orig_name') or w['name'])
             for f in sc.clip_files(w['id']):
                 owner = sc.clip_contributor(f) or me
                 try:
@@ -241,20 +244,43 @@ def export_zip():
 
 
 # ---------------------------------------------------------------- merge
-def _local_word_for(vid, by_id, personal):
-    """the word in my list for word `vid`: a shared word (same ID or an alias) or a personal word (same ID).
-    added if missing - shared words with their fixed name, personal words with the sender's name"""
-    alias_of = {a: w['id'] for w in by_id.values() for a in w.get('aliases', [])}
-    for w in sc.load_words():
-        if w['id'] == vid or (vid in by_id and alias_of.get(w['id']) == vid):
-            return w['id'], False
+def _free_id(base, taken):
+    """base, or base_01, base_02 ... (next free number, in the order words arrive)"""
+    if base not in taken:
+        return base
+    stem = base[:29]
+    for i in range(1, 100):
+        cand = f'{stem}_{i:02d}'
+        if cand not in taken:
+            return cand
+    raise ValueError(f'같은 ID의 개인 단어가 너무 많아요: {base}')
+
+
+def _local_word_for(vid, by_id, personal, me):
+    """the word in my list for word `vid`, added if missing. Returns (local ID, new word name or None).
+    shared word: same ID or an alias (e.g. cups for cup).
+    personal word: the same word = same maker (origin) + same original ID (base). Another person's word with an ID
+    I already use is added as base_01, base_02 ... so different words are never mixed."""
+    words = sc.load_words()
     if vid in by_id:
+        alias_of = {a: w['id'] for w in by_id.values() for a in w.get('aliases', [])}
+        for w in words:
+            if w['id'] == vid or alias_of.get(w['id']) == vid:
+                return w['id'], None
         v = by_id[vid]
         sc.add_word(vid, v['name'], v.get('record_sec', 3.0), shared=True)
-        return vid, by_id[vid]['name']
+        return vid, v['name']
     p = personal[vid]
-    sc.add_word(vid, p['name'], p['record_sec'])
-    return vid, p['name']
+    shared = set(sc.vocab_alias())
+    for w in words:
+        if w['id'] in shared or w['id'] == 'none':
+            continue
+        if (w.get('origin') or me) == p['origin'] and (w.get('base') or w['id']) == p['base']:
+            return w['id'], None
+    new_id = _free_id(p['base'], {w['id'] for w in words} | shared | {'none'})
+    name = p['name'] if new_id == p['base'] else f"{p['name']} ({p['origin']})"[:30]
+    sc.add_word(new_id, name, p['record_sec'], extra={'origin': p['origin'], 'base': p['base'], 'orig_name': p['name']})
+    return new_id, f'{name} [{new_id}]' if new_id != p['base'] else name
 
 
 def merge_zip(data, src_name=''):
@@ -286,7 +312,7 @@ def merge_zip(data, src_name=''):
             raise ValueError('데이터 제공 동의가 없는 파일이에요.')
         by_id, alias = _vocab_maps()
         me = my_id()
-        personal = {}                       # personal words in the file: id -> name / record length
+        personal = {}                       # personal words in the file: id -> name / record length / maker / original ID
         for w in m.get('words', []) if isinstance(m.get('words'), list) else []:
             if not isinstance(w, dict):
                 continue
@@ -296,7 +322,10 @@ def merge_zip(data, src_name=''):
                     sec = min(max(float(w.get('record_sec', 3.0)), 0.5), 10.0)
                 except (TypeError, ValueError):
                     sec = 3.0
-                personal[wid] = {'name': nm, 'record_sec': sec}
+                base, origin = str(w.get('base') or wid), str(w.get('origin') or cid)
+                personal[wid] = {'name': nm, 'record_sec': sec,
+                                 'base': base if sc.WORD_ID_RE.match(base) and base not in alias else wid,
+                                 'origin': origin if sc.CONTRIB_RE.match(origin) else cid}
         have = known_hashes()
         gone = _load_deleted()
         added = dup = bad = skipped = 0
@@ -332,7 +361,7 @@ def merge_zip(data, src_name=''):
                 skipped += 1                # deleted before, or this person was removed
                 continue
             if vid not in local:
-                local[vid], new_name = _local_word_for(vid, by_id, personal)
+                local[vid], new_name = _local_word_for(vid, by_id, personal, me)
                 if new_name:
                     new_words.append(new_name)
             wid = local[vid]
