@@ -941,7 +941,7 @@ class SignerTracker:
         options = vision.HandLandmarkerOptions(
             base_options=mp_python.BaseOptions(model_asset_path=HAND_MODEL),
             running_mode=vision.RunningMode.VIDEO,
-            num_hands=2,
+            num_hands=4,                 # find up to 4, then keep at most one per signer wrist
             min_hand_detection_confidence=0.5,
             min_hand_presence_confidence=0.5,
             min_tracking_confidence=0.5)
@@ -950,18 +950,35 @@ class SignerTracker:
         self.t0 = time.time()
         self.last_ts = -1
 
-    def _is_signer_hand(self, p, kp, cf, box, others):
-        wx, wy = p[0]
+    def _assign_hands(self, cands, kp, cf, box):
+        """one hand per signer wrist: each of the signer's two wrists takes the closest hand within reach,
+        a hand is used at most once, every other hand (e.g. someone behind) is ignored.
+        a wrist that is not seen takes the closest hand near the same arm's elbow instead.
+        cands: hand point lists (image coords). returns indices of the accepted hands."""
         if cf[5] > KP_CONF and cf[6] > KP_CONF:
             sw = float(np.linalg.norm(kp[5] - kp[6]))
         else:
             sw = float(box[3] - box[1]) / 4
         sw = max(sw, 20.0)
-        for j in (9, 10):  # signer's wrists from YOLO pose
-            if cf[j] > 0.3 and math.hypot(wx - kp[j][0], wy - kp[j][1]) < self.wrist_match * sw:
-                return True
-        # wrist not visible: accept only if the hand is inside the signer box and not in anyone else's
-        return _inside(p[0], box) and not any(_inside(p[0], b) for b in others)
+        pairs = []                                   # (distance, wrist slot, hand index)
+        for slot, (wr, el) in enumerate(((9, 7), (10, 8))):      # (wrist, elbow) per arm
+            if cf[wr] > 0.3:
+                anchor, reach = kp[wr], self.wrist_match * sw
+            elif cf[el] > KP_CONF:
+                anchor, reach = kp[el], 1.5 * sw     # forearm is about 1-1.5 shoulder widths long
+            else:
+                continue
+            for i, p in enumerate(cands):
+                d = math.hypot(p[0][0] - anchor[0], p[0][1] - anchor[1])
+                if d < reach:
+                    pairs.append((d, slot, i))
+        used_slot, used_hand = set(), set()
+        for d, slot, i in sorted(pairs):              # closest pairs first
+            if slot in used_slot or i in used_hand:
+                continue
+            used_slot.add(slot)
+            used_hand.add(i)
+        return used_hand
 
     def process(self, frame):
         """frame: mirrored BGR image (drawn on in place).
@@ -1031,10 +1048,12 @@ class SignerTracker:
             ts = max(int((time.time() - self.t0) * 1000), self.last_ts + 1)
             self.last_ts = ts
             res = self.landmarker.detect_for_video(self.mp.Image(image_format=self.mp.ImageFormat.SRGB, data=rgb), ts)
-            for i, lms in enumerate(res.hand_landmarks):
-                p = [(int(l.x * cw) + cx1, int(l.y * ch) + cy1) for l in lms]
-                if not self._is_signer_hand(p, kp, cf, boxes[target], others):
+            cands = [[(int(l.x * cw) + cx1, int(l.y * ch) + cy1) for l in lms] for lms in res.hand_landmarks]
+            keep = self._assign_hands(cands, kp, cf, boxes[target])
+            for i, p in enumerate(cands):
+                if i not in keep:
                     rejected += 1
+                    cv2.circle(frame, p[0], 10, (150, 150, 150), 2)      # ignored hand: grey ring at its wrist
                     continue
                 hside = res.handedness[i][0].category_name
                 draw_hand(frame, p, finger_states(p))

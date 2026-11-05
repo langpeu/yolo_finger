@@ -8,7 +8,8 @@
 
 처음 열면 이 파일을 다 읽고, 아래 순서로 상태를 확인한 뒤 "남은 일"부터 이어서 한다.
 
-1. **작업 폴더**: 사용자 PC의 `C:\yolo_finger` 가 git 저장소다 (2026-11-05부터 여기서 작업). PC 이름 DESKTOP-US66UJG.
+1. **작업 폴더**: 사용자 PC의 `C:\yolo_finger` 가 git 저장소다 (2026-11-05부터 여기서 작업). PC가 두 대(DESKTOP-US66UJG, BIGFOOT)이고 둘 다 이 경로에 클론이 있다. 연결된 PC는 get_device_info 의 deviceName 으로 확인.
+   - 사용자가 다시 클론하면 .git/config 의 저장소 설정이 사라진다. 시작할 때 `git config core.autocrlf true`, user.name/email 을 다시 넣는다.
    - device_bash에서는 `"$HOME/mnt/C:--yolo_finger"` 로 보인다. 안 보이면 device_request_folder_access 로 `C:\yolo_finger` 를 요청한다.
    - git이 잠금 파일을 지워야 하므로 device_request_delete_permission 으로 `C:\yolo_finger` 삭제 권한을 받는다. `data/` 는 지우지 않는다.
    - 시작할 때 `git pull --ff-only` (사용자가 GitHub에서 직접 고칠 때가 있다).
@@ -36,6 +37,8 @@
 - 사용자가 직접 실행해 보고 결과(화면 캡처, 콘솔 로그)를 알려 주는 방식으로 진행한다.
 
 ### 남은 일 (2026-11-05 기준)
+- 뒤 사람 손 거르기(손목당 손 하나) 실제 확인 받기. 그래도 남의 손이 들어오면 손 크기(어깨폭 대비) 기준 추가 검토.
+- 라이선스: Ultralytics YOLO(AGPL) 대체 검토 중. 후보 = D-FINE(COCO 가중치, Apache-2.0, 사람 상자) + MediaPipe Pose(Apache-2.0, 화자 상자만 잘라 1인으로) + MediaPipe 손(Apache-2.0). 젯슨(모니터 없음)은 MediaPipe가 CPU라 느림 → NVIDIA BodyPoseNet(상업 이용 가능, TensorRT) 검토. 사용자 결정 전.
 - 브라우저 최대화 시 FPS 저하가 `keep_full_speed()` 로 나아졌는지 사용자 확인 받기. 안 나으면 줄어든 게 '처리 FPS'(서버)인지 영상만 끊기는지(브라우저) 먼저 구분.
 - 데이터 공유 기능을 사용자 PC에서 실제로 시험 받기 (내보내기 → 다른 PC에서 합치기 → 학습).
 - (선택) 실시간 인식에서 '가장 비슷한 클립의 기여자' 보여주기는 아직 안 함 (지금은 단어별 기여자 목록).
@@ -55,6 +58,7 @@
 - 개발 플랜 문서: https://claude.ai/artifact/3CXA1qF5YrKkWZig9ruREg
 
 ### 최근에 한 일
+- 뒤 사람 손 거르기: `SignerTracker._assign_hands()` — 손을 최대 4개 찾은 뒤 화자 왼·오른 손목마다 가장 가까운 손 하나씩만 받음(어깨폭×wrist_match 안, 한 손은 한 번만). 손목이 안 보이면 같은 팔 팔꿈치에서 어깨폭×1.5 안의 손, 팔꿈치도 없으면 그쪽 손은 버림. 무시한 손은 손목에 회색 동그라미. 실제 웹캠 확인 전. 한계: 내 손이 안 잡히고 남의 손이 내 손목 자리에 있으면 받아들임.
 - 앞뒤 1초 여유 녹화: 녹화 상태 ready → rec(빨간 테두리) → post(1초 더) → 저장. `hist` 덱으로 빨간 테두리 앞 1초도 저장. npz 에 `core`=[시작, 끝]초 (sec = 전체 길이). post 중 중지하면 저장. 자동 녹화 간격은 gap_sec-1초(최소 0.3).
 - 학습 구간 `sc.train_part()` / `load_train_clip()`: core 를 기본으로, 앞뒤 여유 안에서 손·손목 속도가 `MOVE_SPEED`(0.5 어깨폭/초)보다 빠른 동안만 넓힘. core 없는 옛 클립은 전체. 학습·수어 보기·손 인식 비율·클립 목록·클립 재생·내보내기 손 기준 모두 이 구간을 쓴다. 내보내기·합치기는 전체 seq + core 를 그대로 옮긴다 (해시는 전체 seq).
 - 수어 보기 탭: 단어를 고르면 녹화 클립으로 사람 모양 애니메이션(몸·머리·팔, 손가락 색 구분, 손목이 지나온 길). GET `/api/demo?word=` 가 손 잘 보인 클립 중 가장 전형적인 것(다른 클립과 평균 거리가 가장 작은 클립)부터 5개, 화면용으로 손 빈칸 채우기·3프레임 부드럽게. 재생/멈춤, 0.5x, 다른 예시, 위치 막대. 녹화 탭에 '동작 보기' 버튼. 실제 데이터로는 사용자 확인 전.
@@ -132,7 +136,7 @@ README.md "종료 규칙"이 정한 방식을 유지한다. 사용자가 직접 
 
 ## 인식 방식
 1. **YOLO11n-pose** (GPU): 가장 가까운 사람 = 화자. 다른 사람은 회색 처리, 손목 위치가 안 맞는 손은 버린다 (`SignerTracker.process`).
-2. **MediaPipe HandLandmarker** VIDEO 모드 (윈도우에서는 CPU만): 양손 21개 관절.
+2. **MediaPipe HandLandmarker** VIDEO 모드 (윈도우에서는 CPU만): 손을 최대 4개 찾고, 화자 손목마다 가장 가까운 손 하나씩만 씀. 21개 관절.
 3. 특징 `FULL_DIM=238`
    - 원시 `FEAT_DIM=100`: 포즈 0,5~10번 + 손 21×2 + 플래그, 어깨 기준 정규화
    - 손 모양: 손목 기준 좌표, 관절 각도, 엄지 끝 거리 (가중치 ×2)
