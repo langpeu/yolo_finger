@@ -8,19 +8,26 @@
 
 처음 열면 이 파일을 다 읽고, 아래 순서로 상태를 확인한 뒤 "남은 일"부터 이어서 한다.
 
-1. **저장소 준비**: `git clone https://github.com/langpeu/yolo_finger` (이미 있으면 `git pull`). 작업은 클론에서 하고 `main` 에 push 한다.
-2. **사용자 PC 연결 확인**: 세션이 PC와 연결돼 있으면 remote-devices 도구가 보인다.
-   - PC 폴더 `C:\yolo_finger` 는 device_bash에서 `"$HOME/mnt/C:--yolo_finger"` 로 보인다.
-   - 파일 반영: 고친 파일을 `/mnt/user-data/outputs/` 에 복사 -> device_commit_files 로 `C:\yolo_finger\...` 에 쓰기 -> device_bash `md5sum` 으로 클론과 같은지 확인.
-   - 도구가 없으면 PC와 연결이 안 된 것이다. 사용자에게 데스크톱 앱에서 이 대화를 열어 "이 컴퓨터에 연결"하라고 안내하고, 그동안 클론에서 할 수 있는 일을 한다.
+1. **작업 폴더**: 사용자 PC의 `C:\yolo_finger` 가 git 저장소다 (2026-11-05부터 여기서 작업). PC 이름 DESKTOP-US66UJG.
+   - device_bash에서는 `"$HOME/mnt/C:--yolo_finger"` 로 보인다. 안 보이면 device_request_folder_access 로 `C:\yolo_finger` 를 요청한다.
+   - git이 잠금 파일을 지워야 하므로 device_request_delete_permission 으로 `C:\yolo_finger` 삭제 권한을 받는다. `data/` 는 지우지 않는다.
+   - 시작할 때 `git pull --ff-only` (사용자가 GitHub에서 직접 고칠 때가 있다).
+   - 저장소 설정(.git/config): `core.autocrlf=true`, `user.name=Langpeu`, `user.email=8281485+langpeu@users.noreply.github.com`.
+   - 연결 도구(remote-devices)가 없으면 PC와 연결이 안 된 것이다. 데스크톱 앱에서 이 대화를 열어 연결하라고 안내한다.
    - `data/` 안의 사용자 녹화·모델은 읽거나 가져오지 않는다 (아래 "사용자 데이터").
-3. **테스트** (사용자 데이터 없이, 클론에서):
+2. **고치기**: PC 파일을 device_bash 에서 직접 고친다 (python으로 읽고-바꾸고-쓰기, sed -i).
+3. **테스트**: 사용자 데이터 없이 한다. 클라우드 작업 공간에 `git clone https://github.com/langpeu/yolo_finger` 해서
    ```
    pip install -r requirements.txt   # 처음 한 번 (torch는 cpu판이면 충분)
    SIGN_FAKE_CAM=1 SIGN_NO_BROWSER=1 SIGN_PORT=8775 python3 app/web_app.py
    ```
-   Playwright(설치돼 있음)로 페이지를 열어 확인한다. 테스트 뒤 클론에 생긴 `data/` 는 지운다.
-4. **커밋**: 작성자는 `Langpeu <8281485+langpeu@users.noreply.github.com>` (`git config user.name/user.email`). Co-Authored-By·Claude-Session 같은 Claude 표시 줄은 붙이지 않는다 (사용자 요청). `main` 에 push.
+   고친 파일을 클론에 옮겨 Playwright로 확인한다. 테스트 뒤 클론에 생긴 `data/` 는 지운다.
+   실제 웹캠·GPU 확인은 사용자가 `1_web.bat` 으로 해 보고 알려 준다.
+4. **커밋과 push**: PC에서 `git commit` (Co-Authored-By·Claude-Session 같은 Claude 표시 줄은 붙이지 않는다, 사용자 요청).
+   PC에는 GitHub 로그인 정보가 없어 push가 안 된다. 그래서
+   - PC: `git bundle create "$HOME/push.bundle" origin/main..main` (device_bash 작업 폴더 쪽, 저장소 밖)
+   - device_stage_files 로 묶음 파일을 클라우드로 가져와 클론에서 `git pull <묶음> main` 후 `git push origin main`
+   - PC: `git fetch origin` 으로 맞춘 뒤 `git status` 가 깨끗한지 확인.
 5. 사용자에게 결과를 한국어로 짧게 알리고, 웹페이지를 고쳤으면 Ctrl+F5 또는 `1_web.bat` 재실행을 안내한다.
 
 ### 사용자 응답 방식
@@ -35,6 +42,7 @@
 - 사용자가 원할 때만: 0_setup.bat 끝나면 웹 바로 실행, uv 설치 실패 시 winget/pip로 대신 설치.
 
 ### 최근에 한 일
+- 작업 장소를 PC의 git 저장소 `C:\yolo_finger` 로 옮김 (PC에서 커밋, 묶음 파일로 넘겨 클라우드에서 push).
 - 종료 버튼: 탭 자동 닫기(window.close) 삭제, 끝 화면 유지, 열린 탭 모두 끝 화면. 탭 잠금 기능은 오작동해서 삭제. 종료 규칙을 고정 규칙으로 문서화.
 - 커밋 작성자를 Langpeu(GitHub noreply 주소)로 바꾸고 Claude 공동 작성자 표시를 지움 (기록 다시 쓰고 강제 푸시).
 - GitHub 공개(AGPL-3.0), 폴더 정리, Langpeu 로고·이름 표기, 클립·단어 즉시 삭제.
@@ -58,7 +66,7 @@ README.md "종료 규칙"이 정한 방식을 유지한다. 사용자가 직접 
 - 경로는 모두 상대 경로(ROOT 기준). 다른 PC로 옮겨도 동작해야 한다.
 - `.bat` 파일은 CRLF 줄바꿈 (.gitattributes). py/html/md는 LF.
 - 지운 클립·단어는 휴지통 폴더 없이 바로 삭제한다.
-- 파일을 고친 뒤에는 PC에 실제로 반영됐는지 md5로 확인한다.
+- 파일을 고친 뒤에는 `git diff` 로 바뀐 부분을 확인한다.
 - 작업을 마칠 때 이 파일의 "남은 일"·"최근에 한 일"을 고쳐서 다음 세션이 이어 갈 수 있게 한다.
 
 ## 실행 구조
@@ -118,7 +126,6 @@ README.md "종료 규칙"이 정한 방식을 유지한다. 사용자가 직접 
   녹화 길이 4초로 동작 전체를 다시 녹화하고, "최근 3초 최고" 값을 보며 thresh를 0.65까지 낮춰 보는 중.
 
 ## 배포·확인 방법
-- 사용자 PC 폴더: `C:\yolo_finger` (그래픽카드 RTX 4080 FE).
-- 고친 파일은 PC에 복사한 뒤 md5로 확인하고, Langpeu 작성자로 커밋해 `main` 에 push 한다 (Claude 표시 줄 없음).
-- device_commit_files 에 같은 stagedPath를 다시 쓰면 예전 내용이 들어갈 수 있다. 매번 새 경로로 복사하고 md5를 확인한다.
+- 사용자 PC 폴더: `C:\yolo_finger` (git 저장소). 위 "새 세션에서 바로 이어서 하기" 4번 순서로 커밋·push 한다 (Claude 표시 줄 없음).
+- 클라우드에서 만든 파일을 PC에 넣을 때 device_commit_files 에 같은 stagedPath를 다시 쓰면 예전 내용이 들어갈 수 있다. 매번 새 경로로 복사하고 md5를 확인한다.
 - 웹페이지를 고쳤으면 사용자에게 Ctrl+F5나 `1_web.bat` 재실행을 안내한다.
