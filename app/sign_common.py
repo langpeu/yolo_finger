@@ -1,6 +1,6 @@
 # 수어 학습기 by Langpeu - (c) 2026 Langpeu, licensed under AGPL-3.0 (see LICENSE)
 # Shared code: words/settings, clip files, features, closest-person tracker, model, recognizer
-import os, re, json, glob, time, math, shutil, collections, urllib.request
+import os, re, sys, json, glob, time, math, shutil, collections, urllib.request
 os.environ.setdefault('OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS', '0')   # faster Media Foundation webcam start
 import cv2
 import numpy as np
@@ -50,11 +50,33 @@ _migrate_old_layout()
 os.makedirs(DATA_DIR, exist_ok=True)
 os.chdir(MODELS_DIR)          # YOLO downloads its model file into the current folder
 HAND_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task'
-FONT_PATH = 'C:/Windows/Fonts/malgun.ttf'
+FONT_PATHS = ['C:/Windows/Fonts/malgun.ttf',                                  # Windows: Malgun Gothic
+              '/System/Library/Fonts/AppleSDGothicNeo.ttc',                    # macOS
+              '/System/Library/Fonts/Supplemental/AppleGothic.ttf',
+              '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',        # Linux
+              '/usr/share/fonts/truetype/nanum/NanumGothic.ttf']
+FONT_PATH = next((p for p in FONT_PATHS if os.path.exists(p)), FONT_PATHS[0])
 WORD_ID_RE = re.compile(r'^[a-z0-9_]{1,32}$')
 # own clip: <time ms>.npz   merged clip from another person: <contributor ID>__<content hash>.npz
 CLIP_RE = re.compile(r'^([0-9]{6,20}\.(npz|npy)|[a-z0-9-]{2,24}__[0-9a-f]{16}\.npz)$')
 CONTRIB_RE = re.compile(r'^[a-z0-9-]{2,24}$')
+
+# ---------------------------------------------------------------- compute device
+def best_device():
+    """'cuda' (NVIDIA GPU), 'mps' (Apple GPU on M1/M2/M3/M4 Macs) or 'cpu'"""
+    if torch.cuda.is_available():
+        return 'cuda'
+    mps = getattr(torch.backends, 'mps', None)
+    if mps is not None and mps.is_available():
+        return 'mps'
+    return 'cpu'
+
+
+def device_name(dev):
+    if dev == 'cuda':
+        return torch.cuda.get_device_name(0)
+    return 'Apple GPU (MPS)' if dev == 'mps' else 'CPU'
+
 
 # ---------------------------------------------------------------- Windows: keep full speed when the window is covered
 def keep_full_speed():
@@ -577,7 +599,7 @@ class Recognizer:
     def __init__(self, device=None):
         import threading
         self._lk = threading.Lock()
-        self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = device or best_device()
         self.model = None
         self.labels = []
         self.error = None
@@ -830,6 +852,8 @@ def open_camera(index=0, width=None, height=None, fps=None):
     if os.name == 'nt':
         tries = [('MSMF', cv2.CAP_MSMF, True), ('MSMF (camera default format)', cv2.CAP_MSMF, False),
                  ('DSHOW', cv2.CAP_DSHOW, True)]
+    elif sys.platform == 'darwin':
+        tries = [('AVFoundation', cv2.CAP_AVFOUNDATION, False), ('default', None, False)]
     else:
         tries = [('default', None, True)]
     chosen, hung = None, False
@@ -853,7 +877,10 @@ def open_camera(index=0, width=None, height=None, fps=None):
     if chosen is None:
         if hung:
             raise SystemExit('웹캠이 응답하지 않아요. 다른 프로그램(이전에 켠 서버, 카메라 앱, 화상회의 등)이 웹캠을 쓰고 있는지 '
-                             '확인하고 닫은 뒤 1_web.bat을 다시 실행해 주세요. 그래도 안 되면 웹캠 USB를 뺐다 꽂아 주세요.')
+                             '확인하고 닫은 뒤 win_app.bat(맥은 mac_app.command)을 다시 실행해 주세요. 그래도 안 되면 웹캠 USB를 뺐다 꽂아 주세요.')
+        if sys.platform == 'darwin':
+            raise SystemExit('웹캠을 열지 못했어요. 맥에서는 처음에 "터미널이 카메라에 접근" 허용을 물어봐요. '
+                             '시스템 설정 > 개인정보 보호 및 보안 > 카메라에서 터미널을 켠 뒤 mac_app.command 를 다시 실행해 주세요.')
         raise SystemExit('웹캠을 열지 못했어요. 웹캠이 연결돼 있는지 확인해 주세요.')
     cap, name, measured = chosen
     CAMERA_STATE.update(measured=measured, backend=name)
@@ -934,8 +961,9 @@ class SignerTracker:
         if not os.path.exists(HAND_MODEL):
             print('Downloading hand model...')
             urllib.request.urlretrieve(HAND_URL, HAND_MODEL)
-        self.device = 0 if torch.cuda.is_available() else 'cpu'
-        print('Pose device:', torch.cuda.get_device_name(0) if self.device == 0 else 'CPU')
+        dev = best_device()
+        self.device = 0 if dev == 'cuda' else dev          # YOLO: 0 = first NVIDIA GPU, 'mps' = Apple GPU
+        print('Pose device:', device_name(dev))
         self.pose = YOLO(POSE_MODEL if os.path.exists(POSE_MODEL) else 'yolo11n-pose.pt')  # downloads into models/
         self.person_conf = person_conf
         self.switch_ratio = switch_ratio

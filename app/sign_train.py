@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from sign_common import (load_words, load_settings, clip_files, load_clip, load_train_clip, fit_window, resample, hand_ratio,
                          add_shape_features, SignNet, HAND_BASE, FULL_DIM, MODEL_PATH, HISTORY_PATH,
-                         _read_json, _write_json, clip_contributor)
+                         _read_json, _write_json, clip_contributor, best_device, device_name)
 
 MIN_CLIPS = 3        # a word needs at least this many clips to be trained
 N_WARP = 4           # speed/timing-varied copies per real clip
@@ -238,8 +238,8 @@ def train_model(log=print, progress=None, stop=None):
     if len(labels) < 2:
         raise ValueError(f'학습할 단어가 없어요. 단어 하나에 클립이 {MIN_CLIPS}개 이상 필요해요.')
     none_i = 0
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    log('device: ' + (torch.cuda.get_device_name(0) if device == 'cuda' else 'CPU'))
+    device = best_device()
+    log('device: ' + device_name(device))
 
     # 1) validation run: hold out 20% of the REAL clips of each word (no augmented copies leak in)
     tr, va = {}, {}

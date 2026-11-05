@@ -1,5 +1,8 @@
 # Windows batch files must keep CRLF line endings
 *.bat text eol=crlf
+# macOS / Linux launchers must keep LF line endings
+*.command text eol=lf
+*.sh text eol=lf
 *.py text eol=lf
 *.html text eol=lf
 *.md text eol=lf

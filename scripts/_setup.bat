@@ -1,6 +1,6 @@
 @echo off
 rem Installs the Python environment for THIS PC into env_<COMPUTERNAME>.
-rem Helper: run 0_setup.bat instead. Used by 0_setup.bat and automatically by 1_web.bat (via _env.bat).
+rem Helper: run win_setup.bat instead. Used by win_setup.bat and automatically by win_app.bat (via _env.bat).
 setlocal
 for %%I in ("%~dp0..") do set "ROOT=%%~fI"
 cd /d "%ROOT%"
@@ -73,7 +73,7 @@ set "RC=1"
 goto done
 
 :done
-rem started by double-click (not from 0_setup.bat / 1_web.bat): keep the window open
+rem started by double-click (not from win_setup.bat / win_app.bat): keep the window open
 if /i not "%~1"=="called" (
   echo.
   echo Press any key to close.

@@ -1,5 +1,5 @@
 @echo off
-rem Called by 1_web.bat. Each PC gets its own environment folder in the project folder: env_<COMPUTERNAME>
+rem Called by win_app.bat. Each PC gets its own environment folder in the project folder: env_<COMPUTERNAME>
 rem (so the project folder can be copied between PCs without conflicts).
 for %%I in ("%~dp0..") do set "ROOT=%%~fI"
 set "ENVDIR=%ROOT%\env_%COMPUTERNAME%"
@@ -15,7 +15,7 @@ call "%~dp0_setup.bat" called
 "%PY%" -c "import torch, ultralytics, mediapipe, cv2, PIL" >nul 2>nul
 if errorlevel 1 (
   echo.
-  echo Setup did not finish. Run 0_setup.bat and send the messages to Claude.
+  echo Setup did not finish. Run win_setup.bat and send the messages to Claude.
   exit /b 1
 )
 exit /b 0

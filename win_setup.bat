@@ -5,6 +5,6 @@ rem Install (or repair) the Python environment for this PC (env_<COMPUTERNAME>).
 call scripts\_setup.bat called
 set RC=%errorlevel%
 echo.
-if not "%RC%"=="0" (echo Setup failed.) else (echo Done. Run 1_web.bat to open the sign trainer.)
+if not "%RC%"=="0" (echo Setup failed.) else (echo Done. Run win_app.bat to open the sign trainer.)
 echo Press any key to close.
 pause > nul

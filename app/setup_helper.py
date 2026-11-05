@@ -1,5 +1,5 @@
 # 수어 학습기 by Langpeu - (c) 2026 Langpeu, licensed under AGPL-3.0 (see LICENSE)
-# Helper for 0_setup.bat: picks the right PyTorch build for this PC's GPU and checks the install
+# Helper for win_setup.bat / mac_setup.command: picks the right PyTorch build for this PC's GPU and checks the install
 import subprocess, sys
 
 BASE = 'https://download.pytorch.org/whl/'
@@ -53,8 +53,10 @@ def main():
               '| ultralytics', ultralytics.__version__)
         if torch.cuda.is_available():
             print('  CUDA OK:', torch.cuda.get_device_name(0))
-        elif name is not None:
-            print('  WARNING: NVIDIA GPU found but CUDA is not usable. Update the NVIDIA driver, then run 0_setup.bat again.')
+        elif sys.platform == 'darwin' and torch.backends.mps.is_available():
+            print('  Apple GPU (MPS) OK')
+        elif name is not None and sys.platform != 'darwin':
+            print('  WARNING: NVIDIA GPU found but CUDA is not usable. Update the NVIDIA driver, then run win_setup.bat again.')
         else:
             print('  Running on CPU.')
 

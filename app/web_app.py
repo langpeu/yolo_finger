@@ -15,7 +15,7 @@ import sign_share
 FAKE = os.environ.get('SIGN_FAKE_CAM') == '1'   # test mode without webcam / models
 WEB_DIR = os.path.join(sc.ROOT, 'web')
 HOST = '127.0.0.1'
-EXIT_FROM_WEB = 99      # exit code that tells 1_web.bat to close its window too
+EXIT_FROM_WEB = 99      # exit code that tells win_app.bat / mac_app.command to close its window too
 LOW_HAND = 0.5          # clips with hands visible in less than this share are flagged
 
 
@@ -738,9 +738,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def shutdown_app():
-    """종료 button: stop training, release the webcam, then exit (1_web.bat closes its window on EXIT_FROM_WEB)
+    """종료 button: stop training, release the webcam, then exit (win_app.bat / mac_app.command close their window on EXIT_FROM_WEB)
 
-    [종료 규칙 - 바꾸지 말 것] exit code 99 = 1_web.bat closes the window. See README.md "종료 규칙".
+    [종료 규칙 - 바꾸지 말 것] exit code 99 = win_app.bat / mac_app.command close the window. See README.md "종료 규칙".
     """
     time.sleep(0.4)                      # let the HTTP answer reach the browser first
     print('Shutting down (종료 button)...', flush=True)

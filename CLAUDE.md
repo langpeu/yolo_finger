@@ -1,6 +1,6 @@
 # 수어 학습기 by Langpeu — 작업 안내
 
-웹캠으로 한국 수어 단어를 녹화·학습·실시간 인식하는 윈도우용 프로그램.
+웹캠으로 한국 수어 단어를 녹화·학습·실시간 인식하는 프로그램 (윈도우 + 맥).
 모든 조작은 로컬 웹페이지(http://127.0.0.1:8000)에서 한다.
 저장소: https://github.com/langpeu/yolo_finger (branch `main`, AGPL-3.0, © 2026 Langpeu)
 
@@ -23,13 +23,13 @@
    SIGN_FAKE_CAM=1 SIGN_NO_BROWSER=1 SIGN_PORT=8775 python3 app/web_app.py
    ```
    고친 파일을 클론에 옮겨 Playwright로 확인한다. 테스트 뒤 클론에 생긴 `data/` 는 지운다.
-   실제 웹캠·GPU 확인은 사용자가 `1_web.bat` 으로 해 보고 알려 준다.
+   실제 웹캠·GPU 확인은 사용자가 `win_app.bat` 으로 해 보고 알려 준다.
 4. **커밋과 push**: PC에서 `git commit` (Co-Authored-By·Claude-Session 같은 Claude 표시 줄은 붙이지 않는다, 사용자 요청).
    PC에는 GitHub 로그인 정보가 없어 push가 안 된다. 그래서
    - PC: `git bundle create "$HOME/push.bundle" origin/main..main` (device_bash 작업 폴더 쪽, 저장소 밖)
    - device_stage_files 로 묶음 파일을 클라우드로 가져와 클론에서 `git pull <묶음> main` 후 `git push origin main`
    - PC: `git fetch origin` 으로 맞춘 뒤 `git status` 가 깨끗한지 확인.
-5. 사용자에게 결과를 한국어로 짧게 알리고, 웹페이지를 고쳤으면 Ctrl+F5 또는 `1_web.bat` 재실행을 안내한다.
+5. 사용자에게 결과를 한국어로 짧게 알리고, 웹페이지를 고쳤으면 Ctrl+F5 또는 `win_app.bat` 재실행을 안내한다.
 
 ### 사용자 응답 방식
 - 한국어로 답한다. 질문이 분명하면 바로 답하고 진행한다.
@@ -37,6 +37,7 @@
 - 사용자가 직접 실행해 보고 결과(화면 캡처, 콘솔 로그)를 알려 주는 방식으로 진행한다.
 
 ### 남은 일 (2026-11-05 기준)
+- 맥북에서 mac_app.command 실제 실행 확인 받기 (설치, 카메라 권한, MPS 학습, 종료 시 터미널 창 닫힘). PC들은 다음 pull 때 실행 파일 이름이 바뀐 걸 안내.
 - 뒤 사람 손 거르기(손목당 손 하나 + 최소 손 크기) 실제 확인 받기. 내 손이 small 로 빠지면 hand_min_size 를 낮추게 안내.
 - 라이선스: Ultralytics YOLO(AGPL) 대체 검토 중. 후보 = D-FINE(COCO 가중치, Apache-2.0, 사람 상자) + MediaPipe Pose(Apache-2.0, 화자 상자만 잘라 1인으로) + MediaPipe 손(Apache-2.0). 젯슨(모니터 없음)은 MediaPipe가 CPU라 느림 → NVIDIA BodyPoseNet(상업 이용 가능, TensorRT) 검토. 사용자 결정 전.
 - 브라우저 최대화 시 FPS 저하가 `keep_full_speed()` 로 나아졌는지 사용자 확인 받기. 안 나으면 줄어든 게 '처리 FPS'(서버)인지 영상만 끊기는지(브라우저) 먼저 구분.
@@ -47,7 +48,7 @@
 - 엄마(mom) 인식 조정: 지금은 잘 안 잡힌다. 사용자에게 실시간 인식의 "최근 3초 최고" 값을 받아 보고,
   녹화 길이 4초로 다시 녹화했는지 확인한 뒤 thresh(0.75 -> 0.65)나 학습 방식을 조정한다.
 - 새 폴더 구조(app/, web/, scripts/, data/, models/)로 사용자 PC에서 녹화·학습·인식이 다 되는지 확인 받기.
-- 사용자가 원할 때만: 0_setup.bat 끝나면 웹 바로 실행, uv 설치 실패 시 winget/pip로 대신 설치.
+- 사용자가 원할 때만: win_setup.bat 끝나면 웹 바로 실행, uv 설치 실패 시 winget/pip로 대신 설치.
 
 ### 데이터 공유 형식 (sign_share.py)
 - zip: `manifest.json` (format `yolo_finger-signdata`, format_version 1, feat_dim 100, contributor=내보낸 사람, contributors, consent, words, clips) + `clips/<공유단어ID>/<녹화한 사람 ID>__<해시>.npz` (seq, sec, recorded)
@@ -58,6 +59,7 @@
 - 개발 플랜 문서: https://claude.ai/artifact/3CXA1qF5YrKkWZig9ruREg
 
 ### 최근에 한 일
+- 맥 지원 + 실행 파일 이름 정리: `1_web.bat`→`win_app.bat`, `0_setup.bat`→`win_setup.bat`, 맥 `mac_app.command`·`mac_setup.command`(LF, 실행 권한). `sc.best_device()` = cuda / mps / cpu (YOLO·인식·학습 모두). 맥 카메라 AVFoundation(MJPG 요청 안 함), 카메라 권한 안내 메시지. 한글 글꼴 후보 목록(맑은 고딕 / 애플 SD 고딕 / 나눔·Noto). 맥에서는 실제 실행 확인 전.
 - 2026-11-06 GitHub 저장소를 지우고 같은 이름으로 다시 만들어 기록 전체를 다시 올림 (오른쪽 Contributors 칸에 Claude가 남아 있던 문제). 다시 올리기 전에 로컬의 옛 기록 백업 `refs/original` 을 지움 — 다시 올릴 때 절대 함께 올리지 말 것.
 - 최소 손 크기: 손 크기 = max(손목→중지 뿌리, 검지 뿌리→새끼 뿌리) 픽셀. 화자 어깨폭 × `hand_min_size`(기본 0.1, 설정 탭, 0=끔)보다 작으면 손목 매칭 전에 뺌. 영상에 회색 동그라미 + 'small'. 손을 카메라 쪽으로 뻗어도 손바닥 폭이 남아 통과.
 - 뒤 사람 손 거르기: `SignerTracker._assign_hands()` — 손을 최대 4개 찾은 뒤 화자 왼·오른 손목마다 가장 가까운 손 하나씩만 받음(어깨폭×wrist_match 안, 한 손은 한 번만). 손목이 안 보이면 같은 팔 팔꿈치에서 어깨폭×1.5 안의 손, 팔꿈치도 없으면 그쪽 손은 버림. 무시한 손은 손목에 회색 동그라미. 실제 웹캠 확인 전. 한계: 내 손이 안 잡히고 남의 손이 내 손목 자리에 있으면 받아들임.
@@ -83,7 +85,7 @@
 
 ### 종료 규칙 - 바꾸지 말 것
 README.md "종료 규칙"이 정한 방식을 유지한다. 사용자가 직접 바꾸라고 하기 전에는 고치지 않는다.
-- 종료 버튼 -> POST /api/shutdown -> 웹캠 해제 후 os._exit(99) -> 1_web.bat 이 코드 99를 보고 창을 닫음
+- 종료 버튼 -> POST /api/shutdown -> 웹캠 해제 후 os._exit(99) -> win_app.bat 이 코드 99를 보고 창을 닫음
 - 웹페이지에서 window.close() 를 쓰지 않는다. 끝 화면(#byeScreen)을 그대로 둔다.
 - 열린 탭 모두 끝 화면으로 바뀐다 (BroadcastChannel 'sign-trainer', type 'quit').
 - 탭 잠금 / "다른 탭에서 열려 있어요" 같은 기능을 넣지 않는다.
@@ -105,8 +107,11 @@ README.md "종료 규칙"이 정한 방식을 유지한다. 사용자가 직접 
 
 | 파일 | 역할 |
 |---|---|
-| `1_web.bat` | `scripts\_env.bat` 로 환경 확인(없으면 설치) 후 `app\web_app.py` 실행. 종료 코드 99면 창을 닫고, 아니면 pause |
-| `0_setup.bat` | 환경 설치·복구 (`scripts\_setup.bat called`) |
+| `win_app.bat` | `scripts\_env.bat` 로 환경 확인(없으면 설치) 후 `app\web_app.py` 실행. 종료 코드 99면 창을 닫고, 아니면 pause |
+| `win_setup.bat` | 환경 설치·복구 (`scripts\_setup.bat called`). 보통은 필요 없음 |
+| `mac_app.command` | 맥 실행 (더블클릭). `scripts/_env.sh` 로 환경 확인(없으면 설치) 후 실행. 종료 코드 99면 osascript 로 터미널 창 닫기 시도 후 exit 0 |
+| `mac_setup.command` | 맥 환경 설치·복구 (`scripts/_setup.sh called`). 보통은 필요 없음 |
+| `scripts/_env.sh`, `scripts/_setup.sh` | 맥·리눅스용. `env_<LocalHostName>`, uv → Python 3.12 → 맥은 PyPI torch(MPS), 리눅스는 setup_helper 의 CUDA 인덱스. `PYTORCH_ENABLE_MPS_FALLBACK=1` |
 | `scripts/_env.bat` | ROOT, `ENVDIR=%ROOT%\env_%COMPUTERNAME%`, `OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS=0` 설정, import 확인 |
 | `scripts/_setup.bat` | uv 설치 -> Python 3.12 venv(--clear) -> PyTorch(setup_helper가 고른 버전) -> requirements -> 확인 |
 | `app/setup_helper.py` | GPU 확인: compute capability >= 7.5 → cu128, 그보다 오래된 NVIDIA → cu126, 없으면 cpu |
@@ -163,4 +168,4 @@ README.md "종료 규칙"이 정한 방식을 유지한다. 사용자가 직접 
 ## 배포·확인 방법
 - 사용자 PC 폴더: `C:\yolo_finger` (git 저장소). 위 "새 세션에서 바로 이어서 하기" 4번 순서로 커밋·push 한다 (Claude 표시 줄 없음).
 - 클라우드에서 만든 파일을 PC에 넣을 때 device_commit_files 에 같은 stagedPath를 다시 쓰면 예전 내용이 들어갈 수 있다. 매번 새 경로로 복사하고 md5를 확인한다.
-- 웹페이지를 고쳤으면 사용자에게 Ctrl+F5나 `1_web.bat` 재실행을 안내한다.
+- 웹페이지를 고쳤으면 사용자에게 Ctrl+F5나 `win_app.bat` 재실행을 안내한다.
