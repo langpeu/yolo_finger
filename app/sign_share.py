@@ -1,6 +1,7 @@
 # 수어 학습기 by Langpeu - (c) 2026 Langpeu, licensed under AGPL-3.0 (see LICENSE)
 # Sharing recorded clips between people:
-#   export -> signdata_<ID>_<date>.zip : every clip of the 50 shared words + "none" (yours AND merged ones),
+#   export -> signdata_<ID>_<date>.zip : every clip of every word in 단어·클립 (shared 50 + personal words +
+#             "none"; yours AND merged ones),
 #             each clip keeps the temporary ID of the person who recorded it
 #   merge  -> zip files from others are added to your word / clip list, then 학습 uses everything.
 #             clips are identified by a hash of their content, so a clip is never added twice
@@ -28,9 +29,7 @@ CONSENT_TEXT = ('내보내는 데이터는 관절 좌표(영상·사진 없음),
 
 # ---------------------------------------------------------------- shared word list
 def load_vocab():
-    with open(sc.VOCAB_PATH, encoding='utf-8') as f:
-        words = json.load(f)['words']
-    return [{'id': 'none', 'name': '(동작 없음)', 'category': '', 'record_sec': 3.0}] + words
+    return [{'id': 'none', 'name': '(동작 없음)', 'category': '', 'record_sec': 3.0}] + sc.load_vocab()
 
 
 def _vocab_maps():
@@ -165,12 +164,8 @@ def overview():
                 pool[c]['clips'] += 1
                 pool[c]['words'].add(w['id'])
         vid = alias.get(w['id'])
-        if vid is None:
-            if own:
-                excluded.append({'id': w['id'], 'name': w['name'], 'clips': len(own)})
-            continue
-        words.append({'id': w['id'], 'vocab_id': vid, 'name': w['name'], 'own': len(own),
-                      'merged': len(files) - len(own)})
+        words.append({'id': w['id'], 'vocab_id': vid or w['id'], 'shared': vid is not None, 'name': w['name'],
+                      'own': len(own), 'merged': len(files) - len(own)})
     return {
         'me': me,
         'vocab': [{'id': v['id'], 'name': v['name'], 'category': v.get('category', '')} for v in load_vocab()],
@@ -191,12 +186,12 @@ def export_zip():
     me = my_id()
     s = sc.load_settings()
     buf = io.BytesIO()
-    entries, words, low, seen, people = [], {}, 0, set(), {}
+    entries, words, low, seen, people, winfo = [], {}, 0, set(), {}, {}
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
         for w in sc.load_words():
-            vid = alias.get(w['id'])
-            if vid is None:
-                continue
+            vid = alias.get(w['id']) or w['id']       # shared words go out under their shared ID
+            winfo[vid] = {'name': by_id[vid]['name'] if vid in by_id else w['name'],
+                          'record_sec': w.get('record_sec', 3.0), 'shared': vid in by_id}
             for f in sc.clip_files(w['id']):
                 owner = sc.clip_contributor(f) or me
                 try:
@@ -229,14 +224,14 @@ def export_zip():
                                 'hand': round(hand, 3), 'recorded': time.strftime('%Y-%m-%d', time.localtime(rec / 1000)) if rec else ''})
                 words[vid] = words.get(vid, 0) + 1
         if not entries:
-            raise ValueError('내보낼 클립이 없어요. 50개 단어 목록에 있는 단어를 녹화해 주세요.')
+            raise ValueError('내보낼 클립이 없어요. 먼저 녹화해 주세요.')
         manifest = {
             'format': FORMAT, 'format_version': FORMAT_VERSION,
             'feat_dim': sc.FEAT_DIM, 'feat_layout': FEAT_LAYOUT, 'fps': s['fps'],
             'contributor': me, 'contributors': [{'id': k, 'clips': v} for k, v in sorted(people.items())],
             'created': time.strftime('%Y-%m-%d %H:%M:%S'),
             'consent': True, 'consent_text': CONSENT_TEXT,
-            'words': [{'id': k, 'name': by_id[k]['name'], 'clips': v} for k, v in sorted(words.items())],
+            'words': [{'id': k, **winfo[k], 'clips': v} for k, v in sorted(words.items())],
             'clips': entries,
         }
         z.writestr('manifest.json', json.dumps(manifest, ensure_ascii=False, indent=1))
@@ -246,15 +241,20 @@ def export_zip():
 
 
 # ---------------------------------------------------------------- merge
-def _local_word_for(vid, by_id):
-    """the word in my list that stands for shared word `vid` (same ID or an alias); added if missing"""
+def _local_word_for(vid, by_id, personal):
+    """the word in my list for word `vid`: a shared word (same ID or an alias) or a personal word (same ID).
+    added if missing - shared words with their fixed name, personal words with the sender's name"""
     alias_of = {a: w['id'] for w in by_id.values() for a in w.get('aliases', [])}
     for w in sc.load_words():
-        if w['id'] == vid or alias_of.get(w['id']) == vid:
+        if w['id'] == vid or (vid in by_id and alias_of.get(w['id']) == vid):
             return w['id'], False
-    v = by_id[vid]
-    sc.add_word(vid, v['name'], v.get('record_sec', 3.0))
-    return vid, True
+    if vid in by_id:
+        v = by_id[vid]
+        sc.add_word(vid, v['name'], v.get('record_sec', 3.0), shared=True)
+        return vid, by_id[vid]['name']
+    p = personal[vid]
+    sc.add_word(vid, p['name'], p['record_sec'])
+    return vid, p['name']
 
 
 def merge_zip(data, src_name=''):
@@ -284,8 +284,19 @@ def merge_zip(data, src_name=''):
             raise ValueError('임시 ID가 잘못됐어요.')
         if not m.get('consent'):
             raise ValueError('데이터 제공 동의가 없는 파일이에요.')
-        by_id, _ = _vocab_maps()
+        by_id, alias = _vocab_maps()
         me = my_id()
+        personal = {}                       # personal words in the file: id -> name / record length
+        for w in m.get('words', []) if isinstance(m.get('words'), list) else []:
+            if not isinstance(w, dict):
+                continue
+            wid, nm = str(w.get('id', '')), str(w.get('name', '')).strip()
+            if sc.WORD_ID_RE.match(wid) and wid not in alias and wid != 'none' and 1 <= len(nm) <= 30:
+                try:
+                    sec = min(max(float(w.get('record_sec', 3.0)), 0.5), 10.0)
+                except (TypeError, ValueError):
+                    sec = 3.0
+                personal[wid] = {'name': nm, 'record_sec': sec}
         have = known_hashes()
         gone = _load_deleted()
         added = dup = bad = skipped = 0
@@ -295,7 +306,7 @@ def merge_zip(data, src_name=''):
             if not mt:
                 continue
             vid, owner, h = mt.group(1), mt.group(2), mt.group(3)
-            if vid not in by_id or info.file_size > MAX_CLIP_BYTES:
+            if (vid not in by_id and vid not in personal) or info.file_size > MAX_CLIP_BYTES:
                 bad += 1
                 continue
             try:
@@ -321,9 +332,9 @@ def merge_zip(data, src_name=''):
                 skipped += 1                # deleted before, or this person was removed
                 continue
             if vid not in local:
-                local[vid], is_new = _local_word_for(vid, by_id)
-                if is_new:
-                    new_words.append(by_id[vid]['name'])
+                local[vid], new_name = _local_word_for(vid, by_id, personal)
+                if new_name:
+                    new_words.append(new_name)
             wid = local[vid]
             dest_dir = os.path.join(sc.DATA_DIR, wid)
             os.makedirs(dest_dir, exist_ok=True)

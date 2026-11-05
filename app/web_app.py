@@ -327,6 +327,7 @@ def clip_ratio(word_id, fname):
 
 def words_view():
     labels = set(W.recog.labels) if (W.recog and W.recog.model is not None) else set()
+    alias = sc.vocab_alias()
     out = []
     for w in sc.load_words():
         files = sc.clip_files(w['id'])
@@ -338,7 +339,7 @@ def words_view():
                 pass
         out.append({**w, 'clips': len(files), 'hand': float(np.mean(ratios)) if ratios else None,
                     'low': int(sum(1 for x in ratios if x < LOW_HAND)),
-                    'in_model': w['id'] in labels})
+                    'in_model': w['id'] in labels, 'shared': w['id'] == 'none' or w['id'] in alias})
     return out
 
 
@@ -439,6 +440,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, st)
             if u.path == '/api/words':
                 return self._send(200, words_view())
+            if u.path == '/api/vocab':
+                alias = sc.vocab_alias()
+                have = {alias.get(w['id']) for w in sc.load_words()}
+                return self._send(200, [{**v, 'added': v['id'] in have} for v in sc.load_vocab()])
             if u.path == '/api/clips':
                 return self._send(200, clips_view(q.get('word', '')))
             if u.path == '/api/clip':
@@ -503,7 +508,10 @@ class Handler(BaseHTTPRequestHandler):
                 W.refresh_words()
                 return self._send(200, {'deleted': n})
             if u.path == '/api/words/add':
-                sc.add_word(b.get('id'), b.get('name'), b.get('record_sec', 3.0))
+                if b.get('vocab'):
+                    sc.add_vocab_word(b.get('vocab'))
+                else:
+                    sc.add_word(b.get('id'), b.get('name'), b.get('record_sec', 3.0))
                 W.refresh_words()
                 return self._send(200, words_view())
             if u.path == '/api/words/update':

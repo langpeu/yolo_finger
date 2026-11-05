@@ -32,6 +32,10 @@ main{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(360px,1fr);align
 .overlay.ready{background:rgba(200,140,0,.85)}
 .vinfo{display:flex;gap:16px;padding:8px 12px;color:var(--muted);font-size:12px;border-top:1px solid var(--line)}
 .tabs{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.vocab{display:flex;flex-direction:column;gap:8px;margin:8px 0 4px}
+.vocab .vc{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.vocab .vc>span{min-width:92px;color:var(--muted);font-size:12px}
+.vocab button.on{opacity:.55;cursor:default}
 .tabs button{flex:1;min-width:84px;background:none;border:0;color:var(--muted);padding:11px 6px;font:inherit;cursor:pointer;border-bottom:2px solid transparent}
 .tabs button.on{color:var(--text);border-bottom-color:var(--accent);font-weight:700}
 .tab{display:none;padding:14px}
@@ -229,7 +233,11 @@ main>*{min-width:0}
 
     <!-- ===================== 단어·클립 -->
     <div class="tab" id="tab-words">
-      <h3>새 단어 추가</h3>
+      <h3>공유 단어 50개에서 추가</h3>
+      <div class="small muted">눌러서 추가해요. ID·이름·녹화 길이가 정해져 있어서 여러 사람 데이터를 합칠 때 같은 단어로 모여요. ✓ = 이미 추가한 단어.</div>
+      <div id="vocabBox" class="vocab"></div>
+      <h3>개인 단어 직접 추가</h3>
+      <div class="small muted" style="margin-bottom:6px">50개 목록에 없는 단어예요. ID는 공유 단어 ID나 이미 있는 단어와 겹치면 안 돼요. 데이터 공유 때 이 이름 그대로 함께 보내져요.</div>
       <div class="row">
         <label class="f">화면에 표시할 이름<input id="nwName" placeholder="예: 고마워" maxlength="30"></label>
         <label class="f">영문 ID (폴더 이름)<input id="nwId" placeholder="예: thanks" maxlength="32"></label>
@@ -237,7 +245,7 @@ main>*{min-width:0}
         <button class="b pri" id="btnAddWord" style="align-self:flex-end">추가</button>
       </div>
       <h3>단어 목록</h3>
-      <table id="wordTable"></table>
+      <div class="tablewrap"><table id="wordTable"></table></div>
       <div id="clipPanel" style="display:none;margin-top:16px">
         <h3 id="clipTitle"></h3>
         <div class="row">
@@ -262,9 +270,8 @@ main>*{min-width:0}
       </div>
 
       <h3>내보내기</h3>
-      <div class="small muted">공유 단어 50개와 (동작 없음)의 클립을 zip 하나로 받아요. 합쳐 둔 다른 사람 클립도 원래 ID 그대로 들어가요. 손 인식 50% 미만인 단어 클립은 빠져요.</div>
+      <div class="small muted">단어·클립에 있는 단어 전부(공유 단어, 개인 단어, 동작 없음)의 클립을 zip 하나로 받아요. 합쳐 둔 다른 사람 클립도 원래 ID 그대로 들어가요. 손 인식 50% 미만인 단어 클립은 빠져요.</div>
       <div class="tablewrap"><table id="shExport"></table></div>
-      <div id="shExcluded" class="small muted"></div>
       <label class="small" style="display:flex;gap:8px;align-items:flex-start;margin:10px 0"><input type="checkbox" id="shConsent" style="margin-top:3px"><span id="shConsentText"></span></label>
       <button class="b pri" id="btnExport" disabled>zip 내려받기</button>
 
@@ -355,6 +362,17 @@ async function loadWords() {
   if (WORDS.some(w => w.id === cur)) sel.value = cur;
   else if (WORDS.length > 1) sel.value = WORDS[1].id;
   renderRecInfo(); renderWordTable(); renderTrainWords();
+  if (TAB === 'words') await loadVocab();
+}
+async function loadVocab() {
+  const v = await api('/api/vocab'), cats = [...new Set(v.map(x => x.category))];
+  $('#vocabBox').innerHTML = cats.map(c => `<div class="vc"><span>${esc(c)}</span>` +
+    v.filter(x => x.category === c).map(x => `<button class="b sm${x.added ? ' on' : ''}" data-v="${esc(x.id)}" ${x.added ? 'disabled' : ''} title="${esc(x.id)} · ${x.record_sec}초">${x.added ? '✓ ' : ''}${esc(x.name)}</button>`).join('') + '</div>').join('');
+  document.querySelectorAll('#vocabBox [data-v]').forEach(b => b.onclick = run(async () => {
+    await api('/api/words/add', {vocab: b.dataset.v});
+    await loadWords(); $('#recWord').value = b.dataset.v; renderRecInfo();
+    toast(`"${b.textContent}" 을(를) 추가했어요. 녹화 탭에서 바로 녹화할 수 있어요.`, true);
+  }));
 }
 function renderRecInfo() {
   const w = WORDS.find(w => w.id === $('#recWord').value);
@@ -368,12 +386,12 @@ function renderWordTable() {
   $('#wordTable').innerHTML = `<tr><th>이름</th><th>ID</th><th>녹화 길이</th><th class="num">클립</th><th class="num">손 인식</th><th>모델</th><th></th></tr>` +
     WORDS.map(w => `<tr data-id="${esc(w.id)}">
       <td class="wNameCell" data-l="이름"><input class="wName" value="${esc(w.name)}" maxlength="30" style="width:120px"></td>
-      <td class="muted" data-l="ID">${esc(w.id)}</td>
+      <td class="muted" data-l="ID">${esc(w.id)}${w.id === 'none' ? '' : w.shared ? '<div class="small good">공유</div>' : '<div class="small warn">개인</div>'}</td>
       <td data-l="녹화 길이"><input class="wSec" type="number" min="0.5" max="10" step="0.5" value="${w.record_sec}" style="width:70px"> 초</td>
       <td class="num" data-l="클립">${w.clips}</td>
       <td class="num ${w.hand != null && w.hand < .5 ? 'bad' : ''}" data-l="손 인식">${pct(w.hand)}${w.low ? `<div class="small bad">불량 ${w.low}개</div>` : ''}</td>
       <td data-l="모델">${w.in_model ? '<span class="good">포함</span>' : '<span class="muted">-</span>'}</td>
-      <td class="wAct" style="white-space:nowrap"><button class="b sm wSave">저장</button> <button class="b sm wClips">클립 보기·삭제</button>
+      <td class="wAct"><button class="b sm wSave">저장</button> <button class="b sm wClips">클립</button>
         ${w.id === 'none' ? '' : '<button class="b sm red wDel">삭제</button>'}</td></tr>`).join('');
   document.querySelectorAll('#wordTable tr[data-id]').forEach(tr => {
     const id = tr.dataset.id;
@@ -638,10 +656,9 @@ async function loadShare() {
   $('#shId').value = d.me;
   $('#shConsentText').textContent = d.consent_text;
   const rows = d.export_words.filter(w => w.own + w.merged > 0);
-  $('#shExport').innerHTML = rows.length ? `<tr><th>단어</th><th class="num">내 클립</th><th class="num">합친 클립</th></tr>` +
-    rows.map(w => `<tr><td>${esc(w.name)} <span class="muted small">(${esc(w.vocab_id)})</span></td><td class="num">${w.own}</td><td class="num">${w.merged}</td></tr>`).join('')
+  $('#shExport').innerHTML = rows.length ? `<tr><th>단어</th><th>구분</th><th class="num">내 클립</th><th class="num">합친 클립</th></tr>` +
+    rows.map(w => `<tr><td>${esc(w.name)} <span class="muted small">(${esc(w.vocab_id)})</span></td><td class="small">${w.id === 'none' ? '' : w.shared ? '공유' : '개인'}</td><td class="num">${w.own}</td><td class="num">${w.merged}</td></tr>`).join('')
     : `<tr><td class="muted">아직 내보낼 클립이 없어요.</td></tr>`;
-  $('#shExcluded').textContent = d.excluded.length ? '50개 목록에 없어서 빠지는 단어: ' + d.excluded.map(w => `${w.name}(${w.clips})`).join(', ') : '';
   $('#shPool').innerHTML = d.pool.length ? `<tr><th>임시 ID</th><th class="num">클립</th><th class="num">단어</th><th></th></tr>` +
     d.pool.map(p => `<tr><td>${esc(p.id)}</td><td class="num">${p.clips}</td><td class="num">${p.words}</td><td><button class="b sm red" data-rm="${esc(p.id)}">이 ID 클립 삭제</button></td></tr>`).join('')
     : `<tr><td class="muted">아직 합친 데이터가 없어요.</td></tr>`;

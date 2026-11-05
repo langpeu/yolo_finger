@@ -184,11 +184,35 @@ def get_word(word_id):
     return next((w for w in load_words() if w['id'] == word_id), None)
 
 
-def add_word(word_id, name, record_sec):
+def load_vocab():
+    """the shared 50-word list (app/vocab.json). Their IDs are fixed and reserved."""
+    try:
+        with open(VOCAB_PATH, encoding='utf-8') as f:
+            return json.load(f)['words']
+    except (OSError, ValueError, KeyError):
+        return []
+
+
+def vocab_alias():
+    """shared word ID or one of its aliases (e.g. cups) -> shared word ID"""
+    out = {}
+    for v in load_vocab():
+        out[v['id']] = v['id']
+        for a in v.get('aliases', []):
+            out[a] = v['id']
+    return out
+
+
+def add_word(word_id, name, record_sec, shared=False):
+    """shared=False: a personal word - its ID must not be one of the shared 50 (or their aliases)"""
     word_id = (word_id or '').strip().lower()
     name = (name or '').strip()
     if not WORD_ID_RE.match(word_id):
         raise ValueError('영문 ID는 영어 소문자, 숫자, _ 만 쓸 수 있어요 (최대 32자).')
+    if word_id == 'none':
+        raise ValueError('none 은 (동작 없음) 전용 ID예요.')
+    if not shared and word_id in vocab_alias():
+        raise ValueError(f'"{word_id}" 는 공유 단어 50개에 쓰는 ID예요. 위 목록에서 골라 추가하거나 다른 ID를 써 주세요.')
     if not name or len(name) > 30:
         raise ValueError('화면에 표시할 이름을 1~30자로 입력해 주세요.')
     words = load_words()
@@ -199,6 +223,17 @@ def add_word(word_id, name, record_sec):
     save_words(words)
     os.makedirs(os.path.join(DATA_DIR, word_id), exist_ok=True)
     return words
+
+
+def add_vocab_word(vocab_id):
+    """adds one of the shared 50 words with its fixed ID, name and record length"""
+    v = next((v for v in load_vocab() if v['id'] == vocab_id), None)
+    if v is None:
+        raise ValueError('50개 목록에 없는 단어예요.')
+    alias = vocab_alias()
+    if any(alias.get(w['id']) == vocab_id for w in load_words()):
+        raise ValueError(f'이미 추가한 단어예요: {v["name"]}')
+    return add_word(v['id'], v['name'], v.get('record_sec', 3.0), shared=True)
 
 
 def update_word(word_id, name=None, record_sec=None):
