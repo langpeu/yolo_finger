@@ -100,6 +100,7 @@ DEFAULT_SETTINGS = {
     'epochs': 300,         # train
     'person_conf': 0.3,    # tracker: person detection confidence
     'wrist_match': 0.6,    # tracker: hand must be this close (x shoulder width) to the signer's wrist
+    'hand_min_size': 0.1,  # tracker: hands smaller than this (x shoulder width) are someone further away; 0 = off
     'cam_width': 1280,     # camera: requested resolution / frame rate (MJPG); the camera picks the closest it supports
     'cam_height': 720,
     'cam_fps': 30,
@@ -108,6 +109,7 @@ SETTING_LIMITS = {
     'window_sec': (1.0, 10.0), 'fps': (5, 30), 'thresh': (0.3, 0.99), 'need_frames': (1, 20),
     'min_hand': (0.0, 1.0), 'hold_sec': (0.5, 10.0), 'cooldown': (0.0, 10.0), 'ready_sec': (0.0, 5.0),
     'gap_sec': (0.0, 5.0), 'epochs': (50, 2000), 'person_conf': (0.1, 0.9), 'wrist_match': (0.2, 2.0),
+    'hand_min_size': (0.0, 0.4),
     'cam_width': (320, 3840), 'cam_height': (240, 2160), 'cam_fps': (5, 120),
 }
 
@@ -923,7 +925,7 @@ def _inside(pt, b):
 class SignerTracker:
     """YOLO pose (closest person = signer) + MediaPipe hands for the signer only"""
 
-    def __init__(self, person_conf=0.3, switch_ratio=1.3, wrist_match=0.6):
+    def __init__(self, person_conf=0.3, switch_ratio=1.3, wrist_match=0.6, hand_min_size=0.1):
         import mediapipe as mp
         from mediapipe.tasks import python as mp_python
         from mediapipe.tasks.python import vision
@@ -938,6 +940,7 @@ class SignerTracker:
         self.person_conf = person_conf
         self.switch_ratio = switch_ratio
         self.wrist_match = wrist_match
+        self.hand_min_size = hand_min_size
         options = vision.HandLandmarkerOptions(
             base_options=mp_python.BaseOptions(model_asset_path=HAND_MODEL),
             running_mode=vision.RunningMode.VIDEO,
@@ -950,6 +953,13 @@ class SignerTracker:
         self.t0 = time.time()
         self.last_ts = -1
 
+    @staticmethod
+    def hand_size(p):
+        """size of a hand in pixels: palm length (wrist -> middle finger base) or palm width
+        (index base -> little finger base), whichever is bigger (a tilted hand shortens only one of them)"""
+        return max(math.hypot(p[9][0] - p[0][0], p[9][1] - p[0][1]),
+                   math.hypot(p[17][0] - p[5][0], p[17][1] - p[5][1]))
+
     def _assign_hands(self, cands, kp, cf, box):
         """one hand per signer wrist: each of the signer's two wrists takes the closest hand within reach,
         a hand is used at most once, every other hand (e.g. someone behind) is ignored.
@@ -960,6 +970,8 @@ class SignerTracker:
         else:
             sw = float(box[3] - box[1]) / 4
         sw = max(sw, 20.0)
+        small = {i for i, p in enumerate(cands)       # far smaller than the signer's hands: someone further back
+                 if self.hand_min_size > 0 and self.hand_size(p) < self.hand_min_size * sw}
         pairs = []                                   # (distance, wrist slot, hand index)
         for slot, (wr, el) in enumerate(((9, 7), (10, 8))):      # (wrist, elbow) per arm
             if cf[wr] > 0.3:
@@ -969,6 +981,8 @@ class SignerTracker:
             else:
                 continue
             for i, p in enumerate(cands):
+                if i in small:
+                    continue
                 d = math.hypot(p[0][0] - anchor[0], p[0][1] - anchor[1])
                 if d < reach:
                     pairs.append((d, slot, i))
@@ -978,7 +992,7 @@ class SignerTracker:
                 continue
             used_slot.add(slot)
             used_hand.add(i)
-        return used_hand
+        return used_hand, small
 
     def process(self, frame):
         """frame: mirrored BGR image (drawn on in place).
@@ -1049,11 +1063,14 @@ class SignerTracker:
             self.last_ts = ts
             res = self.landmarker.detect_for_video(self.mp.Image(image_format=self.mp.ImageFormat.SRGB, data=rgb), ts)
             cands = [[(int(l.x * cw) + cx1, int(l.y * ch) + cy1) for l in lms] for lms in res.hand_landmarks]
-            keep = self._assign_hands(cands, kp, cf, boxes[target])
+            keep, small = self._assign_hands(cands, kp, cf, boxes[target])
             for i, p in enumerate(cands):
                 if i not in keep:
                     rejected += 1
                     cv2.circle(frame, p[0], 10, (150, 150, 150), 2)      # ignored hand: grey ring at its wrist
+                    if i in small:
+                        cv2.putText(frame, 'small', (p[0][0] + 12, p[0][1] + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                                    (170, 170, 170), 1)
                     continue
                 hside = res.handedness[i][0].category_name
                 draw_hand(frame, p, finger_states(p))

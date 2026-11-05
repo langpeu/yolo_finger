@@ -96,6 +96,7 @@ class Worker(threading.Thread):
             if self.tracker:
                 self.tracker.person_conf = s['person_conf']
                 self.tracker.wrist_match = s['wrist_match']
+                self.tracker.hand_min_size = s['hand_min_size']
 
     def forget_clips(self, word_id, files):
         with self.lock:
@@ -144,7 +145,8 @@ class Worker(threading.Thread):
         try:
             if not FAKE:
                 self.tracker = sc.SignerTracker(person_conf=self.settings['person_conf'],
-                                                wrist_match=self.settings['wrist_match'])
+                                                wrist_match=self.settings['wrist_match'],
+                                                hand_min_size=self.settings['hand_min_size'])
                 self._open_camera()
             self.recog = sc.Recognizer()
             threading.Thread(target=self._infer_loop, daemon=True).start()
