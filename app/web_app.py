@@ -1,7 +1,7 @@
 # 수어 학습기 by Langpeu - (c) 2026 Langpeu, licensed under AGPL-3.0 (see LICENSE)
 # Sign language trainer web app (local only): http://127.0.0.1:8000
 # words / recording / training / live recognition / clip management / settings / history
-import os, sys, json, time, threading, traceback, webbrowser
+import os, sys, json, time, threading, traceback, webbrowser, collections
 from datetime import datetime
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -37,7 +37,8 @@ class Worker(threading.Thread):
         self.n_hands = 0
         self.person = False
         self.rec = {'state': 'idle', 'word': None, 'auto': False, 't': 0.0, 'buf': [],
-                    'session': 0, 'last': None, 'recent': []}
+                    'session': 0, 'last': None, 'recent': [],
+                    'hist': collections.deque(), 'pre': [], 'pre_sec': 0.0, 'post': []}
         self.words = {w['id']: w for w in sc.load_words()}   # cached; refreshed when words change
         self.cam_info = ''
         self.cam_fps = 0.0
@@ -68,6 +69,8 @@ class Worker(threading.Thread):
 
     def stop_record(self):
         with self.lock:
+            if self.rec['state'] == 'post':            # the red-frame part is complete: keep the clip
+                self._save_rec(time.time())
             self.rec.update(state='idle', auto=False, buf=[])
             if self.mode == 'record':
                 self.mode = 'preview'
@@ -76,6 +79,8 @@ class Worker(threading.Thread):
         if mode not in ('preview', 'live'):
             raise ValueError('bad mode')
         with self.lock:
+            if self.rec['state'] == 'post':
+                self._save_rec(time.time())
             if self.rec['state'] != 'idle':
                 self.rec.update(state='idle', auto=False, buf=[])
             self.mode = mode
@@ -211,28 +216,47 @@ class Worker(threading.Thread):
         self.cam_info = sc.camera_info(cap)
         self.reader = sc.CameraReader(cap)
 
+    def _save_rec(self, now):
+        """saves pre (1 s before) + red-frame part + post (up to 1 s after) as one clip; caller holds self.lock"""
+        r, s = self.rec, self.settings
+        sec = self._rec_sec(r['word'])
+        post_sec = min(sc.PAD_SEC, max(0.0, now - r['t'])) if r['post'] else 0.0
+        frames = r['pre'] + r['buf'] + r['post']
+        fname = sc.save_clip(r['word'], frames, sec, s['fps'], pre=r['pre_sec'], post=post_sec)
+        hr = sc.hand_ratio(sc.load_train_clip(r['word'], fname)[0])
+        remember_ratio(r['word'], fname, hr)
+        r['session'] += 1
+        r['last'] = {'file': fname, 'hand': hr, 'time': time.strftime('%H:%M:%S')}
+        r['recent'].insert(0, r['last'])
+        del r['recent'][15:]
+        r.update(state='gap' if r['auto'] else 'idle', t=now, buf=[], pre=[], post=[], pre_sec=0.0)
+        if not r['auto']:
+            self.mode = 'preview'
+
     def _step_record(self, now, feat):
         r, s = self.rec, self.settings
         if r['state'] == 'idle':
+            r['hist'].clear()
             return
-        if r['state'] == 'ready' and now - r['t'] >= s['ready_sec']:
-            r.update(state='rec', t=now, buf=[])
-        if r['state'] == 'rec':
-            r['buf'].append(feat if feat is not None else np.zeros(sc.FEAT_DIM, np.float32))
-            sec = self._rec_sec(r['word'])
-            if now - r['t'] >= sec:
-                fname = sc.save_clip(r['word'], r['buf'], sec, s['fps'])
-                seq, _ = sc.load_clip(r['word'], fname)
-                hr = sc.hand_ratio(seq)
-                remember_ratio(r['word'], fname, hr)
-                r['session'] += 1
-                r['last'] = {'file': fname, 'hand': hr, 'time': time.strftime('%H:%M:%S')}
-                r['recent'].insert(0, r['last'])
-                del r['recent'][15:]
-                r.update(state='gap' if r['auto'] else 'idle', t=now, buf=[])
-                if not r['auto']:
-                    self.mode = 'preview'
-        if r['state'] == 'gap' and now - r['t'] >= s['gap_sec']:
+        f = feat if feat is not None else np.zeros(sc.FEAT_DIM, np.float32)
+        h = r['hist']                                  # last ~1.5 s, for the 1 s before the red frame
+        h.append((now, f))
+        while h and h[0][0] < now - sc.PAD_SEC - 0.5:
+            h.popleft()
+        if r['state'] == 'ready':
+            if now - r['t'] >= s['ready_sec']:
+                pre = [(t, x) for t, x in list(h)[:-1] if t >= now - sc.PAD_SEC]
+                r.update(state='rec', t=now, buf=[f], pre=[x for _, x in pre],
+                         pre_sec=(now - pre[0][0]) if pre else 0.0, post=[])
+        elif r['state'] == 'rec':
+            r['buf'].append(f)
+            if now - r['t'] >= self._rec_sec(r['word']):
+                r.update(state='post', t=now, post=[])  # keep recording 1 s more (not shown as red)
+        elif r['state'] == 'post':
+            r['post'].append(f)
+            if now - r['t'] >= sc.PAD_SEC:
+                self._save_rec(now)
+        elif r['state'] == 'gap' and now - r['t'] >= max(0.3, s['gap_sec'] - sc.PAD_SEC):
             r.update(state='ready', t=now)
 
     def snapshot(self):
@@ -244,8 +268,10 @@ class Worker(threading.Thread):
                 remain = s['ready_sec'] - (now - r['t'])
             elif r['state'] == 'rec':
                 remain = self._rec_sec(r['word']) - (now - r['t'])
+            elif r['state'] == 'post':
+                remain = sc.PAD_SEC - (now - r['t'])
             elif r['state'] == 'gap':
-                remain = s['gap_sec'] - (now - r['t'])
+                remain = max(0.3, s['gap_sec'] - sc.PAD_SEC) - (now - r['t'])
             live = {'model_ok': False, 'error': None}
             if self.recog:
                 rg = self.recog
@@ -321,7 +347,7 @@ def clip_ratio(word_id, fname):
     with _RATIO_LOCK:
         r = _RATIO_CACHE.get((word_id, fname))
     if r is None:
-        r = sc.hand_ratio(sc.load_clip(word_id, fname)[0])
+        r = sc.hand_ratio(sc.load_train_clip(word_id, fname)[0])
         remember_ratio(word_id, fname, r)
     return r
 
@@ -374,7 +400,7 @@ def clips_view(word_id):
     out = []
     for f in reversed(sc.clip_files(word_id)):
         try:
-            seq, sec = sc.load_clip(word_id, f)
+            seq, sec = sc.load_train_clip(word_id, f)      # the part used for training
             who = sc.clip_contributor(f)
             t = _clip_time(f)
             if who:
@@ -391,8 +417,8 @@ def clips_view(word_id):
 def clip_data(word_id, fname):
     if sc.get_word(word_id) is None or not sc.CLIP_RE.match(fname or ''):
         raise ValueError('잘못된 클립이에요.')
-    seq, sec = sc.load_clip(word_id, fname)
-    return {'sec': sec, 'hand_base': sc.HAND_BASE, 'frames': np.round(seq.astype(np.float64), 3).tolist()}
+    seq, sec = sc.load_train_clip(word_id, fname)
+    return {'sec': round(sec, 2), 'hand_base': sc.HAND_BASE, 'frames': np.round(seq.astype(np.float64), 3).tolist()}
 
 
 _DEMO_CACHE = {}        # word -> (file list, ranked clip files)
@@ -441,7 +467,7 @@ def demo_view(word_id, k=5):
         good, vecs = [], []
         for f in files:
             try:
-                seq, sec = sc.load_clip(word_id, f)
+                seq, sec = sc.load_train_clip(word_id, f)
             except Exception:  # noqa: BLE001
                 continue
             if seq.ndim != 2 or seq.shape[1] != sc.FEAT_DIM or sc.hand_ratio(seq) < LOW_HAND:
@@ -458,7 +484,7 @@ def demo_view(word_id, k=5):
     me = sign_share.my_id()
     out = []
     for f in ranked[:k]:
-        seq, sec = sc.load_clip(word_id, f)
+        seq, sec = sc.load_train_clip(word_id, f)       # exactly what training uses
         seq = _smooth(_fill_hands(seq))
         out.append({'file': f, 'sec': round(float(sec), 2), 'who': sc.clip_contributor(f) or me,
                     'frames': np.round(seq.astype(np.float64), 3).tolist()})

@@ -55,6 +55,8 @@
 - 개발 플랜 문서: https://claude.ai/artifact/3CXA1qF5YrKkWZig9ruREg
 
 ### 최근에 한 일
+- 앞뒤 1초 여유 녹화: 녹화 상태 ready → rec(빨간 테두리) → post(1초 더) → 저장. `hist` 덱으로 빨간 테두리 앞 1초도 저장. npz 에 `core`=[시작, 끝]초 (sec = 전체 길이). post 중 중지하면 저장. 자동 녹화 간격은 gap_sec-1초(최소 0.3).
+- 학습 구간 `sc.train_part()` / `load_train_clip()`: core 를 기본으로, 앞뒤 여유 안에서 손·손목 속도가 `MOVE_SPEED`(0.5 어깨폭/초)보다 빠른 동안만 넓힘. core 없는 옛 클립은 전체. 학습·수어 보기·손 인식 비율·클립 목록·클립 재생·내보내기 손 기준 모두 이 구간을 쓴다. 내보내기·합치기는 전체 seq + core 를 그대로 옮긴다 (해시는 전체 seq).
 - 수어 보기 탭: 단어를 고르면 녹화 클립으로 사람 모양 애니메이션(몸·머리·팔, 손가락 색 구분, 손목이 지나온 길). GET `/api/demo?word=` 가 손 잘 보인 클립 중 가장 전형적인 것(다른 클립과 평균 거리가 가장 작은 클립)부터 5개, 화면용으로 손 빈칸 채우기·3프레임 부드럽게. 재생/멈춤, 0.5x, 다른 예시, 위치 막대. 녹화 탭에 '동작 보기' 버튼. 실제 데이터로는 사용자 확인 전.
 - 실시간 인식에 기여자 표시: 인식된 단어 아래와 최근 인식 기록에 `데이터: ID 클립수 · ...` (클립 많은 순, 4명 넘으면 '외 N명'). 모델 파일 `contributors` 를 쓰고, 없는 옛 모델이면 지금 클립 파일로 계산. 내 클립은 내 임시 ID로 표시. `/api/state` live.people.
 - 전체 초기화 버튼(단어·클립 탭 맨 아래, "초기화" 입력해야 활성): `sc.reset_dataset()` 이 clips·words.json·sign_model.pt·train_history.json·deleted_clips.json 삭제, contributor.json·settings.json 유지. POST `/api/reset {confirm:'초기화'}`, 학습 중엔 거부.
@@ -113,7 +115,7 @@ README.md "종료 규칙"이 정한 방식을 유지한다. 사용자가 직접 
 - `env_*/`, `data/`, `models/*` 는 git에서 제외된다. 옛 폴더 구조(루트의 sign_data 등)는 `_migrate_old_layout()` 이 data/, models/ 로 옮긴다.
 
 ### 폴더
-- `data/clips/<단어ID>/*` 녹화 클립 (내 클립 `<시각ms>.npz`, 합친 클립 `<임시ID>__<내용해시16>.npz`), `data/contributor.json` 내 임시 ID, `data/sign_model.pt`, `data/words.json`, `data/settings.json`, `data/train_history.json`
+- `data/clips/<단어ID>/*` 녹화 클립 (npz: seq, sec, 새 클립은 core = 빨간 테두리 구간 초; 내 클립 `<시각ms>.npz`, 합친 클립 `<임시ID>__<내용해시16>.npz`), `data/contributor.json` 내 임시 ID, `data/sign_model.pt`, `data/words.json`, `data/settings.json`, `data/train_history.json`
 - `models/yolo11n-pose.pt`, `models/hand_landmarker.task` (자동 다운로드)
 
 ## 웹 API (web_app.py)

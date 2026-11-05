@@ -3,7 +3,7 @@
 import time
 import numpy as np
 import torch
-from sign_common import (load_words, load_settings, clip_files, load_clip, fit_window, resample, hand_ratio,
+from sign_common import (load_words, load_settings, clip_files, load_clip, load_train_clip, fit_window, resample, hand_ratio,
                          add_shape_features, SignNet, HAND_BASE, FULL_DIM, MODEL_PATH, HISTORY_PATH,
                          _read_json, _write_json, clip_contributor)
 
@@ -216,7 +216,7 @@ def train_model(log=print, progress=None, stop=None):
             continue
         lst = []
         for f in files:
-            seq, sec = load_clip(w['id'], f)
+            seq, sec = load_train_clip(w['id'], f)       # padded clips: only the part with the sign
             lst.append(fit_window(seq, sec, s['window_sec'], L))
             who = clip_contributor(f) or '나'
             people.setdefault(w['id'], {})

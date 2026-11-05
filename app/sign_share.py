@@ -202,12 +202,12 @@ def export_zip():
             for f in sc.clip_files(w['id']):
                 owner = sc.clip_contributor(f) or me
                 try:
-                    seq, sec = sc.load_clip(w['id'], f)
+                    seq, sec, core = sc.load_clip_core(w['id'], f)
                 except Exception:  # noqa: BLE001
                     continue
                 if seq.ndim != 2 or seq.shape[1] != sc.FEAT_DIM:
                     continue
-                hand = sc.hand_ratio(seq)
+                hand = sc.hand_ratio(sc.train_part(seq, sec, core)[0])
                 if vid != 'none' and hand < LOW_HAND:
                     low += 1
                     continue
@@ -223,7 +223,8 @@ def export_zip():
                     except Exception:  # noqa: BLE001
                         rec = 0
                 one = io.BytesIO()
-                np.savez(one, seq=seq.astype(np.float32), sec=np.float32(sec), recorded=np.int64(rec))
+                extra = {'core': np.array(core, np.float32)} if core else {}
+                np.savez(one, seq=seq.astype(np.float32), sec=np.float32(sec), recorded=np.int64(rec), **extra)
                 name = f'clips/{vid}/{owner}__{h}.npz'
                 z.writestr(name, one.getvalue())
                 people[owner] = people.get(owner, 0) + 1
@@ -347,9 +348,12 @@ def merge_zip(data, src_name=''):
                     seq = np.asarray(d['seq'], np.float32)
                     sec = float(d['sec'])
                     rec = int(d['recorded']) if 'recorded' in d else 0
+                    core = [float(x) for x in d['core']] if 'core' in d else None
             except Exception:  # noqa: BLE001
                 bad += 1
                 continue
+            if core is not None and not (len(core) == 2 and 0 <= core[0] < core[1] <= sec + 1e-3):
+                core = None
             if (seq.ndim != 2 or seq.shape[1] != sc.FEAT_DIM or not 4 <= len(seq) <= 600
                     or not np.isfinite(seq).all() or not 0.3 <= sec <= 15):
                 bad += 1
@@ -372,7 +376,8 @@ def merge_zip(data, src_name=''):
             dest_dir = os.path.join(sc.DATA_DIR, wid)
             os.makedirs(dest_dir, exist_ok=True)
             fname = f'{owner}__{h}.npz'
-            np.savez(os.path.join(dest_dir, fname), seq=seq, sec=np.float32(sec), recorded=np.int64(rec))
+            extra = {'core': np.array(core, np.float32)} if core else {}
+            np.savez(os.path.join(dest_dir, fname), seq=seq, sec=np.float32(sec), recorded=np.int64(rec), **extra)
             _HASH_CACHE[(wid, fname)] = h
             have.add(h)
             people.add(owner)

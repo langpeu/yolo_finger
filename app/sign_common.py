@@ -323,13 +323,76 @@ def load_clip(word_id, fname):
     return seq, sec
 
 
-def save_clip(word_id, frames, sec, fps):
+PAD_SEC = 1.0     # recording keeps this much extra before and after the red-frame part
+
+
+def save_clip(word_id, frames, sec, fps, pre=0.0, post=0.0):
+    """frames cover pre + sec + post seconds. `core` = where the red-frame part is (seconds from the start)."""
     d = os.path.join(DATA_DIR, word_id)
     os.makedirs(d, exist_ok=True)
-    n = max(4, int(round(sec * fps)))
+    total = pre + sec + post
+    n = max(4, int(round(total * fps)))
     fname = f'{int(time.time() * 1000)}.npz'
-    np.savez(os.path.join(d, fname), seq=resample(frames, n), sec=np.float32(sec))
+    extra = {'core': np.array([pre, pre + sec], np.float32)} if (pre > 0 or post > 0) else {}
+    np.savez(os.path.join(d, fname), seq=resample(frames, n), sec=np.float32(total), **extra)
     return fname
+
+
+def load_clip_core(word_id, fname):
+    """(seq, seconds, core) - core = (start, end) seconds of the red-frame part, None for clips without padding"""
+    path = os.path.join(DATA_DIR, word_id, fname)
+    if fname.endswith('.npz'):
+        with np.load(path) as d:
+            core = tuple(float(x) for x in d['core']) if 'core' in d else None
+            return d['seq'].astype(np.float32), float(d['sec']), core
+    seq, sec = load_clip(word_id, fname)
+    return seq, sec, None
+
+
+def _activity(seq, fps):
+    """per frame: how fast the hands / wrists move into this frame (shoulder widths per second)"""
+    n = len(seq)
+    sp = np.zeros(n, np.float32)
+    if n < 2:
+        return sp
+    for s in (0, 1):
+        pts = seq[:, HAND_BASE + s * 42: HAND_BASE + s * 42 + 42].reshape(n, 21, 2)
+        here = seq[:, HAND_BASE + 84 + s] >= 0.5
+        palm = pts[:, [0, 5, 9, 13, 17]].mean(1)
+        d = np.linalg.norm(palm[1:] - palm[:-1], axis=1)
+        sp[1:] = np.maximum(sp[1:], np.where(here[1:] & here[:-1], d, 0))
+    for k in (5, 6):                                   # wrists from the body pose
+        p = seq[:, 2 * k: 2 * k + 2]
+        ok = (p != 0).any(1)
+        d = np.linalg.norm(p[1:] - p[:-1], axis=1)
+        sp[1:] = np.maximum(sp[1:], np.where(ok[1:] & ok[:-1], d, 0))
+    return sp * fps
+
+
+MOVE_SPEED = 0.5      # faster than this (shoulder widths / s) counts as part of the sign
+
+
+def train_part(seq, sec, core):
+    """the part of a clip that is used for training (and shown in 수어 보기):
+    the red-frame part, widened into the extra 1 s before / after only while the hands are still moving."""
+    if core is None or len(seq) < 4:
+        return seq, sec
+    n = len(seq)
+    fps = n / max(sec, 1e-6)
+    i0 = int(round(core[0] * fps))
+    i1 = int(round(core[1] * fps))
+    i0, i1 = max(0, min(i0, n - 2)), max(i0 + 2, min(i1, n))
+    act = _activity(seq, fps)
+    while i0 > 0 and act[i0] > MOVE_SPEED:            # moving into the first frame: the sign started earlier
+        i0 -= 1
+    while i1 < n and act[i1] > MOVE_SPEED:            # still moving after the last frame: it ended later
+        i1 += 1
+    return seq[i0:i1], (i1 - i0) / fps
+
+
+def load_train_clip(word_id, fname):
+    """(seq, seconds) of the part used for training"""
+    return train_part(*load_clip_core(word_id, fname))
 
 
 def delete_clips(word_id, fnames):
