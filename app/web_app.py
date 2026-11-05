@@ -56,6 +56,8 @@ class Worker(threading.Thread):
 
     # ---------- control (called from HTTP threads)
     def start_record(self, word_id, auto):
+        if TRAIN['running']:
+            raise ValueError('학습 중에는 녹화할 수 없어요. 학습이 끝난 뒤 녹화해 주세요.')
         self.refresh_words()
         if word_id not in self.words:
             raise ValueError('없는 단어예요.')
@@ -78,6 +80,8 @@ class Worker(threading.Thread):
     def set_mode(self, mode):
         if mode not in ('preview', 'live'):
             raise ValueError('bad mode')
+        if mode == 'live' and TRAIN['running']:
+            raise ValueError('학습 중에는 실시간 인식을 할 수 없어요. 학습이 끝난 뒤 다시 열어 주세요.')
         with self.lock:
             if self.rec['state'] == 'post':
                 self._save_rec(time.time())
@@ -162,6 +166,9 @@ class Worker(threading.Thread):
                 time.sleep(1 / 15)
                 frame, feat = self._fake_frame(time.time())
                 lines, nh = [('FAKE', (0, 255, 255))], 2
+                if TRAIN['running']:
+                    self._show_paused(frame)
+                    continue
             else:
                 if self.reopen:
                     self.reopen = False
@@ -184,6 +191,9 @@ class Worker(threading.Thread):
                 if fails:
                     fails, self.status, self.error = 0, 'running', None
                 frame = cv2.flip(frame, 1)
+                if TRAIN['running']:                  # training uses the GPU / CPU: pause detection
+                    self._show_paused(frame)
+                    continue
                 frame, feat, lines, nh = self.tracker.process(frame)
             now = time.time()
             self.fps = 0.9 * self.fps + 0.1 / max(now - prev, 1e-6)
@@ -200,6 +210,15 @@ class Worker(threading.Thread):
             if rec_on:
                 cv2.rectangle(frame, (0, 0), (frame.shape[1] - 1, frame.shape[0] - 1), (0, 0, 255), 14)
             self._publish(frame)
+
+    def _show_paused(self, frame):
+        """while training: no person / hand detection (the GPU and CPU go to training), just a dimmed camera picture"""
+        frame = (frame * 0.45).astype(np.uint8)
+        sc.put(frame, 'TRAINING - detection paused', 40, (0, 220, 255), 1.0)
+        sc.put(frame, f"{int(TRAIN['progress'] * 100)}%", 80, (0, 220, 255), 1.0)
+        self.n_hands, self.person = 0, False
+        self._publish(frame)
+        time.sleep(0.12)                          # ~8 pictures a second is enough for a paused view
 
     def _infer_loop(self):
         """runs the sign model ~10 times a second, separately from the camera loop"""
@@ -332,7 +351,8 @@ def start_training():
         if TRAIN['running']:
             raise ValueError('이미 학습 중이에요.')
         TRAIN.update(running=True, progress=0.0, log=[], result=None, error=None, stop=False)
-        threading.Thread(target=_train_job, daemon=True).start()
+    W.set_mode('preview')                     # stops recording / live recognition; detection pauses while training
+    threading.Thread(target=_train_job, daemon=True).start()
 
 
 # ======================================================================= data views

@@ -59,6 +59,7 @@
 - 개발 플랜 문서: https://claude.ai/artifact/3CXA1qF5YrKkWZig9ruREg
 
 ### 최근에 한 일
+- 학습 중 인식 멈춤: TRAIN['running'] 이면 카메라 루프가 SignerTracker 를 건너뛰고 어둡게 한 영상 + 'TRAINING - detection paused'·진행률만 약 8fps로 보냄(`Worker._show_paused`). 학습 시작 때 `W.set_mode('preview')` 로 녹화·실시간 인식 정지. 학습 중 녹화 시작·실시간 인식은 400 오류로 막음. 학습 탭에 안내 문구.
 - 맥 지원 + 실행 파일 이름 정리: `1_web.bat`→`win_app.bat`, `0_setup.bat`→`win_setup.bat`, 맥 `mac_app.command`·`mac_setup.command`(LF, 실행 권한). `sc.best_device()` = cuda / mps / cpu (YOLO·인식·학습 모두). 맥 카메라 AVFoundation(MJPG 요청 안 함), 카메라 권한 안내 메시지. 한글 글꼴 후보 목록(맑은 고딕 / 애플 SD 고딕 / 나눔·Noto). 맥에서는 실제 실행 확인 전.
 - 2026-11-06 GitHub 저장소를 지우고 같은 이름으로 다시 만들어 기록 전체를 다시 올림 (오른쪽 Contributors 칸에 Claude가 남아 있던 문제). 다시 올리기 전에 로컬의 옛 기록 백업 `refs/original` 을 지움 — 다시 올릴 때 절대 함께 올리지 말 것.
 - 최소 손 크기: 손 크기 = max(손목→중지 뿌리, 검지 뿌리→새끼 뿌리) 픽셀. 화자 어깨폭 × `hand_min_size`(기본 0.1, 설정 탭, 0=끔)보다 작으면 손목 매칭 전에 뺌. 영상에 회색 동그라미 + 'small'. 손을 카메라 쪽으로 뻗어도 손바닥 폭이 남아 통과.
