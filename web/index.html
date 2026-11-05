@@ -279,7 +279,13 @@ main>*{min-width:0}
 
       <h3 style="margin-top:20px">합친 데이터</h3>
       <div class="tablewrap"><table id="shPool"></table></div>
-      <div class="small muted" style="margin-top:6px">학습 탭에서 학습을 시작하면 내 클립과 합친 클립 전체로 학습해요. 어떤 사람이 빼 달라고 하면 그 ID의 클립을 지우세요 (바로 지워지고 되돌릴 수 없어요).</div>
+      <div class="small muted" style="margin-top:6px">학습 탭에서 학습을 시작하면 내 클립과 합친 클립 전체로 학습해요. 어떤 사람이 빼 달라고 하면 그 ID의 클립을 지우세요. 바로 지워지고, 앞으로 어떤 zip에서도 그 ID의 클립은 합치지 않아요.</div>
+      <h3 style="margin-top:20px">지운 클립·뺀 ID</h3>
+      <div class="row">
+        <span id="shDeleted" class="small"></span>
+        <button class="b sm" id="btnForget">지운 클립 목록 비우기</button>
+      </div>
+      <div class="tablewrap"><table id="shBlocked"></table></div>
     </div>
 
     <!-- ===================== 설정 -->
@@ -639,12 +645,23 @@ async function loadShare() {
   $('#shPool').innerHTML = d.pool.length ? `<tr><th>임시 ID</th><th class="num">클립</th><th class="num">단어</th><th></th></tr>` +
     d.pool.map(p => `<tr><td>${esc(p.id)}</td><td class="num">${p.clips}</td><td class="num">${p.words}</td><td><button class="b sm red" data-rm="${esc(p.id)}">이 ID 클립 삭제</button></td></tr>`).join('')
     : `<tr><td class="muted">아직 합친 데이터가 없어요.</td></tr>`;
+  $('#shDeleted').textContent = `지운 합친 클립 ${d.deleted}개는 다른 zip에 있어도 다시 합치지 않아요.`;
+  $('#btnForget').disabled = !d.deleted;
+  $('#shBlocked').innerHTML = d.blocked.length ? `<tr><th>뺀 임시 ID</th><th>뺀 시각</th><th></th></tr>` +
+    d.blocked.map(p => `<tr><td>${esc(p.id)}</td><td class="small muted">${esc(p.time)}</td><td><button class="b sm" data-ub="${esc(p.id)}">다시 받기</button></td></tr>`).join('') : '';
+  document.querySelectorAll('#shBlocked [data-ub]').forEach(b => b.onclick = run(async () => {
+    await api('/api/share/unblock', {contributor: b.dataset.ub}); toast(`${b.dataset.ub} 의 클립을 다시 합칠 수 있어요.`, true); await loadShare();
+  }));
   document.querySelectorAll('#shPool [data-rm]').forEach(b => b.onclick = run(async () => {
-    if (!confirm(`${b.dataset.rm} 의 클립을 모두 지울까요? 바로 지워지고 되돌릴 수 없어요.`)) return;
+    if (!confirm(`${b.dataset.rm} 의 클립을 모두 지울까요? 바로 지워지고 되돌릴 수 없어요. 앞으로 이 ID의 클립은 합치지 않아요.`)) return;
     const r = await api('/api/share/remove', {contributor: b.dataset.rm});
     toast(`${r.deleted}개 지웠어요.`, true); await loadShare();
   }));
 }
+$('#btnForget').onclick = run(async () => {
+  if (!confirm('지운 클립 목록을 비울까요? 다음에 합칠 때 예전에 지운 클립이 다시 들어올 수 있어요. (뺀 ID는 그대로 빠져 있어요)')) return;
+  const r = await api('/api/share/forget', {}); toast(`목록에서 ${r.cleared}개를 지웠어요.`, true); await loadShare();
+});
 $('#shConsent').onchange = () => $('#btnExport').disabled = !$('#shConsent').checked;
 $('#btnShId').onclick = run(async () => { const r = await api('/api/share/id', {id: $('#shId').value}); $('#shId').value = r.me; toast('임시 ID를 저장했어요.', true); });
 $('#btnExport').onclick = run(async () => {
@@ -674,11 +691,11 @@ $('#shFolder').onchange = run(async () => {
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
       added += j.added;
-      rows.push(`<tr><td>${esc(f.name)}</td><td>${esc(j.contributor)}</td><td class="num good">${j.added}</td><td class="num">${j.duplicate}</td><td class="num ${j.rejected ? 'bad' : ''}">${j.rejected}</td><td class="small">${j.new_words.length ? '새 단어: ' + esc(j.new_words.join(', ')) : ''}</td></tr>`);
+      rows.push(`<tr><td>${esc(f.name)}</td><td>${esc(j.contributor)}</td><td class="num good">${j.added}</td><td class="num">${j.duplicate}</td><td class="num">${j.deleted}</td><td class="num ${j.rejected ? 'bad' : ''}">${j.rejected}</td><td class="small">${j.new_words.length ? '새 단어: ' + esc(j.new_words.join(', ')) : ''}</td></tr>`);
     } catch (e) {
-      rows.push(`<tr><td>${esc(f.name)}</td><td colspan="5" class="bad small">${esc(e.name === 'AbortError' ? '서버 응답이 없어요.' : e.message)}</td></tr>`);
+      rows.push(`<tr><td>${esc(f.name)}</td><td colspan="6" class="bad small">${esc(e.name === 'AbortError' ? '서버 응답이 없어요.' : e.message)}</td></tr>`);
     }
-    $('#shMergeTable').innerHTML = `<tr><th>파일</th><th>보낸 사람</th><th class="num">추가</th><th class="num">중복</th><th class="num">거부</th><th></th></tr>` + rows.join('');
+    $('#shMergeTable').innerHTML = `<tr><th>파일</th><th>보낸 사람</th><th class="num">추가</th><th class="num">중복</th><th class="num">지운 것</th><th class="num">거부</th><th></th></tr>` + rows.join('');
   }
   msg.textContent = `zip ${files.length}개에서 클립 ${added}개를 더했어요.`;
   await loadWords(); await loadShare();

@@ -5,6 +5,8 @@
 #   merge  -> zip files from others are added to your word / clip list, then 학습 uses everything.
 #             clips are identified by a hash of their content, so a clip is never added twice
 #             (same zip merged again, or your own clips coming back inside someone else's zip)
+#   deleted -> merged clips you delete and IDs you remove are remembered in data/deleted_clips.json,
+#             so they do not come back with the next zip
 # A clip is joint-coordinate data only (no video, no images).
 import io, os, re, json, time, zipfile, hashlib, secrets
 import numpy as np
@@ -88,6 +90,58 @@ def known_hashes():
     return out
 
 
+# ---------------------------------------------------------------- deleted clips / removed IDs
+def _load_deleted():
+    d = sc._read_json(sc.DELETED_PATH, {})
+    if not isinstance(d, dict):
+        d = {}
+    d.setdefault('hashes', {})
+    d.setdefault('blocked', {})
+    return d
+
+
+def _remember(word_id, fnames, block=None):
+    d = _load_deleted()
+    now = time.strftime('%Y-%m-%d %H:%M:%S')
+    for f in fnames:
+        who = sc.clip_contributor(f)
+        if who:                                   # own clips never come back anyway (see merge_zip)
+            try:
+                d['hashes'][clip_hash(word_id, f)] = {'who': who, 'word': word_id, 'time': now}
+            except Exception:  # noqa: BLE001
+                pass
+    if block:
+        d['blocked'][block] = now
+    sc._write_json(sc.DELETED_PATH, d)
+
+
+def delete_clips(word_id, fnames):
+    """deletes clips right away; merged ones are remembered so the next zip does not bring them back"""
+    fnames = [f for f in fnames if sc.CLIP_RE.match(f or '')]
+    _remember(word_id, fnames)
+    return sc.delete_clips(word_id, fnames)
+
+
+def remember_word(word_id):
+    """call before a whole word is deleted"""
+    _remember(word_id, sc.clip_files(word_id))
+
+
+def unblock(cid):
+    d = _load_deleted()
+    d['blocked'].pop(cid, None)
+    sc._write_json(sc.DELETED_PATH, d)
+
+
+def forget_deleted():
+    """empties the deleted-clip list (removed IDs stay removed)"""
+    d = _load_deleted()
+    n = len(d['hashes'])
+    d['hashes'] = {}
+    sc._write_json(sc.DELETED_PATH, d)
+    return n
+
+
 def _recorded_ms(fname):
     try:
         return int(fname.split('.')[0])
@@ -99,6 +153,7 @@ def _recorded_ms(fname):
 def overview():
     by_id, alias = _vocab_maps()
     me = my_id()
+    gone = _load_deleted()
     words, excluded, pool = [], [], {}
     for w in sc.load_words():
         files = sc.clip_files(w['id'])
@@ -123,6 +178,8 @@ def overview():
         'excluded': excluded,
         'pool': [{'id': c, 'clips': v['clips'], 'words': len(v['words'])} for c, v in sorted(pool.items())],
         'consent_text': CONSENT_TEXT,
+        'deleted': len(gone['hashes']),
+        'blocked': [{'id': k, 'time': v} for k, v in sorted(gone['blocked'].items())],
     }
 
 
@@ -232,7 +289,8 @@ def merge_zip(data, src_name=''):
         by_id, _ = _vocab_maps()
         me = my_id()
         have = known_hashes()
-        added = dup = bad = 0
+        gone = _load_deleted()
+        added = dup = bad = skipped = 0
         new_words, local, people = [], {}, set()
         for info in infos:
             mt = ZIP_CLIP_RE.match(info.filename)
@@ -261,6 +319,9 @@ def merge_zip(data, src_name=''):
             if owner == me:
                 dup += 1                    # my clip that I deleted on purpose: don't bring it back
                 continue
+            if h in gone['hashes'] or owner in gone['blocked']:
+                skipped += 1                # deleted before, or this person was removed
+                continue
             if vid not in local:
                 local[vid], is_new = _local_word_for(vid, by_id)
                 if is_new:
@@ -275,14 +336,16 @@ def merge_zip(data, src_name=''):
             people.add(owner)
             added += 1
     return {'file': src_name, 'contributor': cid, 'people': sorted(people), 'added': added, 'duplicate': dup,
-            'rejected': bad, 'new_words': new_words}
+            'deleted': skipped, 'rejected': bad, 'new_words': new_words}
 
 
 def remove_contributor(cid):
-    """deletes every merged clip of one contributor right away (e.g. when they ask to be taken out)"""
+    """deletes every merged clip of one contributor right away (e.g. when they ask to be taken out)
+    and remembers the ID, so their clips are not merged again from any zip"""
     if not sc.CONTRIB_RE.match(cid or ''):
         raise ValueError('임시 ID가 잘못됐어요.')
     n = 0
     for w in sc.load_words():
         n += sc.delete_clips(w['id'], [f for f in sc.clip_files(w['id']) if sc.clip_contributor(f) == cid])
+    _remember('', [], block=cid)        # the ID block keeps them out; 다시 받기 (unblock) lets them back in
     return n

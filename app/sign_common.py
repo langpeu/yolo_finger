@@ -19,6 +19,7 @@ WORDS_PATH = os.path.join(DATA_ROOT, 'words.json')
 SETTINGS_PATH = os.path.join(DATA_ROOT, 'settings.json')
 HISTORY_PATH = os.path.join(DATA_ROOT, 'train_history.json')
 CONTRIB_PATH = os.path.join(DATA_ROOT, 'contributor.json')   # this PC's temporary contributor ID for sharing
+DELETED_PATH = os.path.join(DATA_ROOT, 'deleted_clips.json')  # merged clips you deleted / IDs you removed: never merged again
 VOCAB_PATH = os.path.join(APP_DIR, 'vocab.json')           # shared 50-word list (in git)
 HAND_MODEL = os.path.join(MODELS_DIR, 'hand_landmarker.task')
 POSE_MODEL = os.path.join(MODELS_DIR, 'yolo11n-pose.pt')

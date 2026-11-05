@@ -38,7 +38,6 @@
 ### 남은 일 (2026-11-05 기준)
 - 데이터 공유 기능을 사용자 PC에서 실제로 시험 받기 (내보내기 → 다른 PC에서 합치기 → 학습).
 - 실시간 인식 화면에 단어와 기여자 표시: 사용자는 원함. 방식(단어별 기여자 목록 / 가장 비슷한 클립의 기여자) 답을 아직 못 받음. 모델 파일에 `contributors` 는 이미 저장됨.
-- 내가 지운 남의 클립은 다른 zip으로 다시 들어올 수 있다. 필요하면 지운 해시 목록을 둔다.
 - 단어 추가 화면에서 50개 목록 고르기, 단어마다 한국수어사전 링크.
 - 사람 단위 검증(기여자를 통째로 떼어 정확도 재기).
 - 엄마(mom) 인식 조정: 지금은 잘 안 잡힌다. 사용자에게 실시간 인식의 "최근 3초 최고" 값을 받아 보고,
@@ -49,11 +48,13 @@
 ### 데이터 공유 형식 (sign_share.py)
 - zip: `manifest.json` (format `yolo_finger-signdata`, format_version 1, feat_dim 100, contributor=내보낸 사람, contributors, consent, words, clips) + `clips/<공유단어ID>/<녹화한 사람 ID>__<해시>.npz` (seq, sec, recorded)
 - 해시 = float32 seq 바이트의 sha1 앞 16자. 합칠 때 다시 계산하고, 이미 가진 해시(내 클립 포함)는 건너뛴다. 내 ID의 클립은 다시 들여오지 않는다 (지운 내 클립이 돌아오지 않게).
+- 지운 목록 `data/deleted_clips.json` = {hashes: 지운 합친 클립 해시, blocked: 뺀 임시 ID}. 클립 삭제·단어 삭제 때 합친 클립 해시를 기록, 기여자 삭제는 ID만 막는다(다시 받기 = 차단 해제로 복구). 합칠 때 둘 다 건너뛰고 '지운 것'으로 센다. POST `/api/share/unblock`, `/api/share/forget`(해시 목록 비우기).
 - 내보내기는 내 클립 + 합친 클립 전체를 원래 ID 그대로 넣는다. 압축 안의 이름으로 파일을 풀지 않고 정해진 경로에만 쓴다 (zip slip 방지), 크기·개수 제한 있음.
 - 취합 방식 결정(2026-11-05): 참여자가 zip을 슬랙으로 보내고 Langpeu가 웹에서 폴더를 골라 합친다. Hugging Face는 나중에.
 - 개발 플랜 문서: https://claude.ai/artifact/3CXA1qF5YrKkWZig9ruREg
 
 ### 최근에 한 일
+- 지운 클립 목록: 지운 합친 클립과 뺀 ID는 다른 zip에서도 다시 합치지 않음. 데이터 공유 탭에 "지운 클립·뺀 ID" (다시 받기, 목록 비우기), 합치기 표에 '지운 것' 열.
 - 데이터 공유 탭 추가: 임시 ID, 내보내기 zip, 폴더 선택 합치기(중복 없음), 합친 데이터 표·기여자 삭제, 학습 결과에 기여자 수. 클립 목록에 기여자 열.
 - 공유 단어 50개 목록 `app/vocab.json`.
 - 작업 장소를 PC의 git 저장소 `C:\yolo_finger` 로 옮김 (PC에서 커밋, 묶음 파일로 넘겨 클라우드에서 push).
@@ -108,7 +109,7 @@ README.md "종료 규칙"이 정한 방식을 유지한다. 사용자가 직접 
 
 ## 웹 API (web_app.py)
 - GET: `/`, `/logo.png`, `/favicon.png`, `/frame.jpg?after=N` (한 장씩, 헤더 X-Frame-Id), `/api/state`, `/api/words`, `/api/clips`, `/api/clip`, `/api/train`, `/api/history`, `/api/settings`
-- 데이터 공유: GET `/api/share`(현황), GET `/api/export?consent=1`(zip 내려받기), POST `/api/merge?name=` (본문 = zip 바이트), POST `/api/share/id`, POST `/api/share/remove`
+- 데이터 공유: GET `/api/share`(현황), GET `/api/export?consent=1`(zip 내려받기), POST `/api/merge?name=` (본문 = zip 바이트), POST `/api/share/id`, `/api/share/remove`, `/api/share/unblock`, `/api/share/forget`
 - POST: `/api/words/add|update|delete`, `/api/clips/delete` (`{'deleted': n}`), `/api/record/start|stop`, `/api/mode`, `/api/train/start|stop`, `/api/settings`, `/api/shutdown`
 - 영상은 MJPEG 스트림 대신 `/frame.jpg` 를 한 장씩 가져온다 (브라우저의 사이트당 연결 6개 제한 때문). 탭이 안 보이면 멈춘다. 클라이언트 fetch에는 타임아웃이 있다.
 - 테스트용 환경 변수: `SIGN_FAKE_CAM=1`(웹캠·모델 없이), `SIGN_NO_BROWSER=1`, `SIGN_PORT`.

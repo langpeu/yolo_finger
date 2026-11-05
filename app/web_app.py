@@ -493,6 +493,11 @@ class Handler(BaseHTTPRequestHandler):
             b = self._json_body()
             if u.path == '/api/share/id':
                 return self._send(200, {'me': sign_share.set_my_id(b.get('id'))})
+            if u.path == '/api/share/unblock':
+                sign_share.unblock(b.get('contributor'))
+                return self._send(200, {'ok': True})
+            if u.path == '/api/share/forget':
+                return self._send(200, {'cleared': sign_share.forget_deleted()})
             if u.path == '/api/share/remove':
                 n = sign_share.remove_contributor(b.get('contributor'))
                 W.refresh_words()
@@ -508,6 +513,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/api/words/delete':
                 if W.rec['state'] != 'idle' and W.rec['word'] == b.get('id'):
                     W.stop_record()
+                if b.get('id') != 'none' and sc.get_word(b.get('id')) is not None:
+                    sign_share.remember_word(b.get('id'))
                 sc.delete_word(b.get('id'))
                 W.refresh_words()
                 return self._send(200, words_view())
@@ -516,7 +523,7 @@ class Handler(BaseHTTPRequestHandler):
                 if sc.get_word(word) is None:
                     raise ValueError('없는 단어예요.')
                 files = list(b.get('files') or [])
-                n = sc.delete_clips(word, files)
+                n = sign_share.delete_clips(word, files)
                 W.forget_clips(word, files)
                 return self._send(200, {'deleted': n})
             if u.path == '/api/record/start':
