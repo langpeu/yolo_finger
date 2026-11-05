@@ -35,13 +35,27 @@
 - 코드나 예시를 길게 나열해야 할 때는 먼저 필요한지 물어본다.
 - 사용자가 직접 실행해 보고 결과(화면 캡처, 콘솔 로그)를 알려 주는 방식으로 진행한다.
 
-### 남은 일 (2026-11-04 기준)
+### 남은 일 (2026-11-05 기준)
+- 데이터 공유 기능을 사용자 PC에서 실제로 시험 받기 (내보내기 → 다른 PC에서 합치기 → 학습).
+- 실시간 인식 화면에 단어와 기여자 표시: 사용자는 원함. 방식(단어별 기여자 목록 / 가장 비슷한 클립의 기여자) 답을 아직 못 받음. 모델 파일에 `contributors` 는 이미 저장됨.
+- 내가 지운 남의 클립은 다른 zip으로 다시 들어올 수 있다. 필요하면 지운 해시 목록을 둔다.
+- 단어 추가 화면에서 50개 목록 고르기, 단어마다 한국수어사전 링크.
+- 사람 단위 검증(기여자를 통째로 떼어 정확도 재기).
 - 엄마(mom) 인식 조정: 지금은 잘 안 잡힌다. 사용자에게 실시간 인식의 "최근 3초 최고" 값을 받아 보고,
   녹화 길이 4초로 다시 녹화했는지 확인한 뒤 thresh(0.75 -> 0.65)나 학습 방식을 조정한다.
 - 새 폴더 구조(app/, web/, scripts/, data/, models/)로 사용자 PC에서 녹화·학습·인식이 다 되는지 확인 받기.
 - 사용자가 원할 때만: 0_setup.bat 끝나면 웹 바로 실행, uv 설치 실패 시 winget/pip로 대신 설치.
 
+### 데이터 공유 형식 (sign_share.py)
+- zip: `manifest.json` (format `yolo_finger-signdata`, format_version 1, feat_dim 100, contributor=내보낸 사람, contributors, consent, words, clips) + `clips/<공유단어ID>/<녹화한 사람 ID>__<해시>.npz` (seq, sec, recorded)
+- 해시 = float32 seq 바이트의 sha1 앞 16자. 합칠 때 다시 계산하고, 이미 가진 해시(내 클립 포함)는 건너뛴다. 내 ID의 클립은 다시 들여오지 않는다 (지운 내 클립이 돌아오지 않게).
+- 내보내기는 내 클립 + 합친 클립 전체를 원래 ID 그대로 넣는다. 압축 안의 이름으로 파일을 풀지 않고 정해진 경로에만 쓴다 (zip slip 방지), 크기·개수 제한 있음.
+- 취합 방식 결정(2026-11-05): 참여자가 zip을 슬랙으로 보내고 Langpeu가 웹에서 폴더를 골라 합친다. Hugging Face는 나중에.
+- 개발 플랜 문서: https://claude.ai/artifact/3CXA1qF5YrKkWZig9ruREg
+
 ### 최근에 한 일
+- 데이터 공유 탭 추가: 임시 ID, 내보내기 zip, 폴더 선택 합치기(중복 없음), 합친 데이터 표·기여자 삭제, 학습 결과에 기여자 수. 클립 목록에 기여자 열.
+- 공유 단어 50개 목록 `app/vocab.json`.
 - 작업 장소를 PC의 git 저장소 `C:\yolo_finger` 로 옮김 (PC에서 커밋, 묶음 파일로 넘겨 클라우드에서 push).
 - 종료 버튼: 탭 자동 닫기(window.close) 삭제, 끝 화면 유지, 열린 탭 모두 끝 화면. 탭 잠금 기능은 오작동해서 삭제. 종료 규칙을 고정 규칙으로 문서화.
 - 커밋 작성자를 Langpeu(GitHub noreply 주소)로 바꾸고 Claude 공동 작성자 표시를 지움 (기록 다시 쓰고 강제 푸시).
@@ -80,18 +94,21 @@ README.md "종료 규칙"이 정한 방식을 유지한다. 사용자가 직접 
 | `app/setup_helper.py` | GPU 확인: compute capability >= 7.5 → cu128, 그보다 오래된 NVIDIA → cu126, 없으면 cpu |
 | `app/web_app.py` | 웹 서버(stdlib ThreadingHTTPServer, 127.0.0.1만, Host 헤더 검사), Worker(카메라·녹화·인식), 학습 스레드 |
 | `app/sign_common.py` | 경로·설정, 특징 계산, 화자 추적, 모델, 실시간 인식기, 카메라 |
-| `app/sign_train.py` | 학습 `train_model(log, progress, stop)` |
-| `web/index.html` | 웹페이지 전체 (반응형, 탭: 녹화 / 실시간 인식 / 학습 / 단어·클립 / 설정 / 학습 기록) |
+| `app/sign_train.py` | 학습 `train_model(log, progress, stop)`. 기여자별 클립 수를 학습 기록과 모델 파일(`contributors`)에 남김 |
+| `app/sign_share.py` | 데이터 공유: 임시 ID, 내보내기 zip, 합치기(중복 검사), 기여자 클립 삭제 |
+| `app/vocab.json` | 공유 단어 50개 (+ none). 배고파·목말라·엄마·컵은 빼지 않는다. `cups` 는 `cup` 의 별칭 |
+| `web/index.html` | 웹페이지 전체 (반응형, 탭: 녹화 / 실시간 인식 / 학습 / 단어·클립 / 데이터 공유 / 설정 / 학습 기록) |
 
 - 프로젝트는 `C:\yolo_finger` 처럼 C 드라이브 바로 아래에 둔다. 문서·바탕 화면은 윈도우 "제어된 폴더 액세스"가 설치를 막는다.
 - `env_*/`, `data/`, `models/*` 는 git에서 제외된다. 옛 폴더 구조(루트의 sign_data 등)는 `_migrate_old_layout()` 이 data/, models/ 로 옮긴다.
 
 ### 폴더
-- `data/clips/<단어ID>/*` 녹화 클립, `data/sign_model.pt`, `data/words.json`, `data/settings.json`, `data/train_history.json`
+- `data/clips/<단어ID>/*` 녹화 클립 (내 클립 `<시각ms>.npz`, 합친 클립 `<임시ID>__<내용해시16>.npz`), `data/contributor.json` 내 임시 ID, `data/sign_model.pt`, `data/words.json`, `data/settings.json`, `data/train_history.json`
 - `models/yolo11n-pose.pt`, `models/hand_landmarker.task` (자동 다운로드)
 
 ## 웹 API (web_app.py)
 - GET: `/`, `/logo.png`, `/favicon.png`, `/frame.jpg?after=N` (한 장씩, 헤더 X-Frame-Id), `/api/state`, `/api/words`, `/api/clips`, `/api/clip`, `/api/train`, `/api/history`, `/api/settings`
+- 데이터 공유: GET `/api/share`(현황), GET `/api/export?consent=1`(zip 내려받기), POST `/api/merge?name=` (본문 = zip 바이트), POST `/api/share/id`, POST `/api/share/remove`
 - POST: `/api/words/add|update|delete`, `/api/clips/delete` (`{'deleted': n}`), `/api/record/start|stop`, `/api/mode`, `/api/train/start|stop`, `/api/settings`, `/api/shutdown`
 - 영상은 MJPEG 스트림 대신 `/frame.jpg` 를 한 장씩 가져온다 (브라우저의 사이트당 연결 6개 제한 때문). 탭이 안 보이면 멈춘다. 클라이언트 fetch에는 타임아웃이 있다.
 - 테스트용 환경 변수: `SIGN_FAKE_CAM=1`(웹캠·모델 없이), `SIGN_NO_BROWSER=1`, `SIGN_PORT`.

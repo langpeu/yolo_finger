@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 
 import sign_common as sc
+import sign_share
 
 FAKE = os.environ.get('SIGN_FAKE_CAM') == '1'   # test mode without webcam / models
 WEB_DIR = os.path.join(sc.ROOT, 'web')
@@ -355,8 +356,14 @@ def clips_view(word_id):
     for f in reversed(sc.clip_files(word_id)):
         try:
             seq, sec = sc.load_clip(word_id, f)
+            who = sc.clip_contributor(f)
+            t = _clip_time(f)
+            if who:
+                with np.load(os.path.join(sc.DATA_DIR, word_id, f)) as d:
+                    rec = int(d['recorded']) if 'recorded' in d else 0
+                t = datetime.fromtimestamp(rec / 1000).strftime('%m-%d %H:%M:%S') if rec else ''
             out.append({'file': f, 'sec': round(sec, 2), 'frames': len(seq), 'hand': sc.hand_ratio(seq),
-                        'time': _clip_time(f)})
+                        'time': t, 'who': who})
         except Exception as e:  # noqa: BLE001
             out.append({'file': f, 'error': str(e), 'time': _clip_time(f)})
     return out
@@ -442,6 +449,21 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, history_view())
             if u.path == '/api/settings':
                 return self._send(200, {'values': sc.load_settings(), 'limits': sc.SETTING_LIMITS})
+            if u.path == '/api/share':
+                return self._send(200, sign_share.overview())
+            if u.path == '/api/export':
+                if q.get('consent') != '1':
+                    raise ValueError('데이터 제공 동의에 체크해 주세요.')
+                body, fname, info = sign_share.export_zip()
+                print(f"exported {fname}: {info['clips']} clips, {info['words']} words, {info['people']} people", flush=True)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/zip')
+                self.send_header('Content-Disposition', f'attachment; filename="{fname}"')
+                self.send_header('Content-Length', str(len(body)))
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                self.wfile.write(body)
+                return None
             return self._send(404, {'error': 'not found'})
         except ValueError as e:
             return self._send(400, {'error': str(e)})
@@ -456,7 +478,25 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(403, {'error': 'forbidden'})
         u = urlparse(self.path)
         try:
+            if u.path == '/api/merge':          # body = one exported zip file
+                n = int(self.headers.get('Content-Length') or 0)
+                if n <= 0 or n > sign_share.MAX_ZIP_BYTES:
+                    raise ValueError('파일이 비었거나 너무 커요 (100MB 초과).')
+                data = self.rfile.read(n)
+                name = parse_qs(u.query).get('name', [''])[0][:200]
+                if TRAIN['running']:
+                    raise ValueError('학습 중에는 합칠 수 없어요. 학습이 끝난 뒤 다시 해 주세요.')
+                r = sign_share.merge_zip(data, name)
+                W.refresh_words()
+                print(f"merged {name}: +{r['added']} clips, {r['duplicate']} duplicate, {r['rejected']} rejected", flush=True)
+                return self._send(200, r)
             b = self._json_body()
+            if u.path == '/api/share/id':
+                return self._send(200, {'me': sign_share.set_my_id(b.get('id'))})
+            if u.path == '/api/share/remove':
+                n = sign_share.remove_contributor(b.get('contributor'))
+                W.refresh_words()
+                return self._send(200, {'deleted': n})
             if u.path == '/api/words/add':
                 sc.add_word(b.get('id'), b.get('name'), b.get('record_sec', 3.0))
                 W.refresh_words()

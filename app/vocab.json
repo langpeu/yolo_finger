@@ -1,0 +1,309 @@
+{
+ "version": 1,
+ "note": "공유용 단어 50개. 내보내기·합치기는 이 목록의 단어와 (동작 없음) none 만 다룬다. 배고파·목말라·엄마·컵은 빼지 않는다.",
+ "words": [
+  {
+   "id": "hello",
+   "name": "안녕하세요",
+   "category": "인사·대답",
+   "record_sec": 3.0
+  },
+  {
+   "id": "thanks",
+   "name": "감사합니다",
+   "category": "인사·대답",
+   "record_sec": 3.0
+  },
+  {
+   "id": "sorry",
+   "name": "미안합니다",
+   "category": "인사·대답",
+   "record_sec": 3.0
+  },
+  {
+   "id": "okay",
+   "name": "괜찮아요",
+   "category": "인사·대답",
+   "record_sec": 3.0
+  },
+  {
+   "id": "yes",
+   "name": "네",
+   "category": "인사·대답",
+   "record_sec": 3.0
+  },
+  {
+   "id": "no",
+   "name": "아니요",
+   "category": "인사·대답",
+   "record_sec": 3.0
+  },
+  {
+   "id": "like",
+   "name": "좋아요",
+   "category": "인사·대답",
+   "record_sec": 3.0
+  },
+  {
+   "id": "dislike",
+   "name": "싫어요",
+   "category": "인사·대답",
+   "record_sec": 3.0
+  },
+  {
+   "id": "mom",
+   "name": "엄마",
+   "category": "사람",
+   "record_sec": 4.0
+  },
+  {
+   "id": "dad",
+   "name": "아빠",
+   "category": "사람",
+   "record_sec": 3.0
+  },
+  {
+   "id": "baby",
+   "name": "아기",
+   "category": "사람",
+   "record_sec": 3.0
+  },
+  {
+   "id": "friend",
+   "name": "친구",
+   "category": "사람",
+   "record_sec": 3.0
+  },
+  {
+   "id": "teacher",
+   "name": "선생님",
+   "category": "사람",
+   "record_sec": 3.0
+  },
+  {
+   "id": "doctor",
+   "name": "의사",
+   "category": "사람",
+   "record_sec": 3.0
+  },
+  {
+   "id": "hungry",
+   "name": "배고파",
+   "category": "몸 상태·요청",
+   "record_sec": 3.0
+  },
+  {
+   "id": "thirsty",
+   "name": "목말라",
+   "category": "몸 상태·요청",
+   "record_sec": 4.0
+  },
+  {
+   "id": "sick",
+   "name": "아파요",
+   "category": "몸 상태·요청",
+   "record_sec": 3.0
+  },
+  {
+   "id": "tired",
+   "name": "피곤해요",
+   "category": "몸 상태·요청",
+   "record_sec": 3.0
+  },
+  {
+   "id": "sleepy",
+   "name": "졸려요",
+   "category": "몸 상태·요청",
+   "record_sec": 3.0
+  },
+  {
+   "id": "toilet",
+   "name": "화장실",
+   "category": "몸 상태·요청",
+   "record_sec": 3.0
+  },
+  {
+   "id": "help",
+   "name": "도와주세요",
+   "category": "몸 상태·요청",
+   "record_sec": 3.0
+  },
+  {
+   "id": "wait",
+   "name": "기다려요",
+   "category": "몸 상태·요청",
+   "record_sec": 3.0
+  },
+  {
+   "id": "eat",
+   "name": "먹다",
+   "category": "몸 상태·요청",
+   "record_sec": 3.0
+  },
+  {
+   "id": "drink",
+   "name": "마시다",
+   "category": "몸 상태·요청",
+   "record_sec": 3.0
+  },
+  {
+   "id": "water",
+   "name": "물",
+   "category": "음식·음료",
+   "record_sec": 3.0
+  },
+  {
+   "id": "rice",
+   "name": "밥",
+   "category": "음식·음료",
+   "record_sec": 3.0
+  },
+  {
+   "id": "bread",
+   "name": "빵",
+   "category": "음식·음료",
+   "record_sec": 3.0
+  },
+  {
+   "id": "milk",
+   "name": "우유",
+   "category": "음식·음료",
+   "record_sec": 3.0
+  },
+  {
+   "id": "coffee",
+   "name": "커피",
+   "category": "음식·음료",
+   "record_sec": 3.0
+  },
+  {
+   "id": "fruit",
+   "name": "과일",
+   "category": "음식·음료",
+   "record_sec": 3.0
+  },
+  {
+   "id": "apple",
+   "name": "사과",
+   "category": "음식·음료",
+   "record_sec": 3.0
+  },
+  {
+   "id": "medicine",
+   "name": "약",
+   "category": "음식·음료",
+   "record_sec": 3.0
+  },
+  {
+   "id": "cup",
+   "name": "컵",
+   "category": "사물",
+   "record_sec": 3.0,
+   "aliases": [
+    "cups"
+   ]
+  },
+  {
+   "id": "phone",
+   "name": "휴대폰",
+   "category": "사물",
+   "record_sec": 3.0
+  },
+  {
+   "id": "book",
+   "name": "책",
+   "category": "사물",
+   "record_sec": 3.0
+  },
+  {
+   "id": "bag",
+   "name": "가방",
+   "category": "사물",
+   "record_sec": 3.0
+  },
+  {
+   "id": "clothes",
+   "name": "옷",
+   "category": "사물",
+   "record_sec": 3.0
+  },
+  {
+   "id": "shoes",
+   "name": "신발",
+   "category": "사물",
+   "record_sec": 3.0
+  },
+  {
+   "id": "chair",
+   "name": "의자",
+   "category": "사물",
+   "record_sec": 3.0
+  },
+  {
+   "id": "bed",
+   "name": "침대",
+   "category": "사물",
+   "record_sec": 3.0
+  },
+  {
+   "id": "door",
+   "name": "문",
+   "category": "사물",
+   "record_sec": 3.0
+  },
+  {
+   "id": "money",
+   "name": "돈",
+   "category": "사물",
+   "record_sec": 3.0
+  },
+  {
+   "id": "clock",
+   "name": "시계",
+   "category": "사물",
+   "record_sec": 3.0
+  },
+  {
+   "id": "tv",
+   "name": "텔레비전",
+   "category": "사물",
+   "record_sec": 3.0
+  },
+  {
+   "id": "home",
+   "name": "집",
+   "category": "장소·때",
+   "record_sec": 3.0
+  },
+  {
+   "id": "school",
+   "name": "학교",
+   "category": "장소·때",
+   "record_sec": 3.0
+  },
+  {
+   "id": "hospital",
+   "name": "병원",
+   "category": "장소·때",
+   "record_sec": 3.0
+  },
+  {
+   "id": "work",
+   "name": "회사",
+   "category": "장소·때",
+   "record_sec": 3.0
+  },
+  {
+   "id": "today",
+   "name": "오늘",
+   "category": "장소·때",
+   "record_sec": 3.0
+  },
+  {
+   "id": "tomorrow",
+   "name": "내일",
+   "category": "장소·때",
+   "record_sec": 3.0
+  }
+ ]
+}

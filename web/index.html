@@ -167,6 +167,7 @@ main>*{min-width:0}
       <button data-tab="live">실시간 인식</button>
       <button data-tab="train">학습</button>
       <button data-tab="words">단어·클립</button>
+      <button data-tab="share">데이터 공유</button>
       <button data-tab="settings">설정</button>
       <button data-tab="history">학습 기록</button>
     </nav>
@@ -252,6 +253,35 @@ main>*{min-width:0}
       </div>
     </div>
 
+    <!-- ===================== 데이터 공유 -->
+    <div class="tab" id="tab-share">
+      <div class="row">
+        <label class="f">내 임시 ID<input id="shId" maxlength="24" placeholder="예: u-3f2a9c1e"></label>
+        <button class="b sm" id="btnShId" style="align-self:flex-end">ID 저장</button>
+        <span class="small muted" style="align-self:flex-end">실명·이메일은 쓰지 마세요. 내보내는 클립에 이 ID가 붙어요.</span>
+      </div>
+
+      <h3>내보내기</h3>
+      <div class="small muted">공유 단어 50개와 (동작 없음)의 클립을 zip 하나로 받아요. 합쳐 둔 다른 사람 클립도 원래 ID 그대로 들어가요. 손 인식 50% 미만인 단어 클립은 빠져요.</div>
+      <div class="tablewrap"><table id="shExport"></table></div>
+      <div id="shExcluded" class="small muted"></div>
+      <label class="small" style="display:flex;gap:8px;align-items:flex-start;margin:10px 0"><input type="checkbox" id="shConsent" style="margin-top:3px"><span id="shConsentText"></span></label>
+      <button class="b pri" id="btnExport" disabled>zip 내려받기</button>
+
+      <h3 style="margin-top:20px">합치기</h3>
+      <div class="small muted">받은 zip 파일을 한 폴더에 모아 두고 그 폴더를 고르세요. 폴더 안의 zip을 모두 풀어 내 단어·클립 목록에 더해요. 이미 있는 클립은 건너뛰어요.</div>
+      <div class="row" style="margin-top:8px">
+        <button class="b pri" id="btnMerge">폴더 선택해서 합치기</button>
+        <input type="file" id="shFolder" webkitdirectory directory multiple style="display:none">
+        <span id="shMergeMsg" class="small"></span>
+      </div>
+      <div class="tablewrap"><table id="shMergeTable"></table></div>
+
+      <h3 style="margin-top:20px">합친 데이터</h3>
+      <div class="tablewrap"><table id="shPool"></table></div>
+      <div class="small muted" style="margin-top:6px">학습 탭에서 학습을 시작하면 내 클립과 합친 클립 전체로 학습해요. 어떤 사람이 빼 달라고 하면 그 ID의 클립을 지우세요 (바로 지워지고 되돌릴 수 없어요).</div>
+    </div>
+
     <!-- ===================== 설정 -->
     <div class="tab" id="tab-settings">
       <table id="setTable"></table>
@@ -307,6 +337,7 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = run(async () 
   if (TAB === 'train' || TAB === 'words' || TAB === 'record') await loadWords();
   if (TAB === 'train') await loadTrain();
   if (TAB === 'settings') await loadSettings();
+  if (TAB === 'share') await loadShare();
   if (TAB === 'history') await loadHistory();
 }));
 
@@ -368,8 +399,8 @@ async function openClips(id) {
   $('#clipPanel').style.display = 'block';
   if (!openClips._quiet) $('#clipPanel').scrollIntoView({behavior: 'smooth', block: 'start'});
   $('#clipTitle').textContent = `${nameOf(id)} 클립 ${CLIPS.length}개`;
-  $('#clipTable').innerHTML = `<tr><th></th><th>녹화 시각</th><th class="num">길이</th><th class="num">손 인식</th><th></th></tr>` +
-    CLIPS.map(c => `<tr data-f="${esc(c.file)}"><td><input type="checkbox" class="cSel"></td><td>${esc(c.time)}</td>
+  $('#clipTable').innerHTML = `<tr><th></th><th>녹화 시각</th><th>기여자</th><th class="num">길이</th><th class="num">손 인식</th><th></th></tr>` +
+    CLIPS.map(c => `<tr data-f="${esc(c.file)}"><td><input type="checkbox" class="cSel"></td><td>${esc(c.time)}</td><td>${c.who ? esc(c.who) : '나'}</td>
       <td class="num">${c.sec ?? '-'}초</td><td class="num ${c.hand < .5 ? 'bad' : 'good'}">${pct(c.hand)}</td>
       <td style="white-space:nowrap"><button class="b sm cPlay">▶</button></td></tr>`).join('');
   document.querySelectorAll('#clipTable tr[data-f]').forEach(tr => tr.querySelector('.cPlay').onclick = run(() => playClip(tr.dataset.f)));
@@ -548,8 +579,8 @@ async function loadTrain() {
 }
 function resultHtml(r) {
   const L = r.labels, nm = l => esc(r.names[l] || l);
-  let h = `<h3>결과 — 따로 떼어 둔 클립 정확도 ${pct(r.val_acc)}</h3><table><tr><th>단어</th><th class="num">클립</th><th class="num">정확도</th></tr>` +
-    L.map(l => `<tr><td>${nm(l)}</td><td class="num">${r.counts[l]}</td><td class="num ${r.per_word[l] != null && r.per_word[l] < .8 ? 'warn' : ''}">${pct(r.per_word[l])}</td></tr>`).join('') + '</table>';
+  let h = `<h3>결과 — 따로 떼어 둔 클립 정확도 ${pct(r.val_acc)}</h3>${r.people ? `<div class="small muted">기여자 ${r.people}명의 클립으로 학습했어요.</div>` : ''}<table><tr><th>단어</th><th class="num">클립</th><th class="num">사람</th><th class="num">정확도</th></tr>` +
+    L.map(l => `<tr><td>${nm(l)}</td><td class="num">${r.counts[l]}</td><td class="num">${r.contributors ? Object.keys(r.contributors[l] || {}).length : '-'}</td><td class="num ${r.per_word[l] != null && r.per_word[l] < .8 ? 'warn' : ''}">${pct(r.per_word[l])}</td></tr>`).join('') + '</table>';
   h += `<h3 style="margin-top:14px">헷갈림 표 <span class="small muted">(행 = 실제, 열 = 예측)</span></h3><div class="tablewrap"><table class="conf"><tr><th></th>${L.map(l => `<th>${nm(l)}</th>`).join('')}</tr>` +
     L.map((l, i) => `<tr><th>${nm(l)}</th>${r.confusion[i].map((v, j) => `<td class="${v && i !== j ? 'bad' : v ? 'good' : 'muted'}">${v}</td>`).join('')}</tr>`).join('') + '</table></div>';
   return h + `<p class="small muted">클립이 적으면 정확도가 높게 나와도 실제로는 흔들릴 수 있어요. 실시간 인식 탭에서 꼭 확인해 보세요.</p>`;
@@ -594,6 +625,64 @@ async function loadHistory() {
     h.map(r => `<tr><td>${esc(r.time)}</td><td>${r.labels.map(l => `${esc(r.names[l] || l)} ${r.counts[l]}` + (r.per_word[l] == null ? '' : ` <span class="muted">(${pct(r.per_word[l])})</span>`)).join(', ')}</td>
       <td class="num">${pct(r.val_acc)}</td><td class="num">${r.duration_s}초</td></tr>`).join('');
 }
+
+// ---------------------------------------------------------------- data sharing
+async function loadShare() {
+  const d = await api('/api/share');
+  $('#shId').value = d.me;
+  $('#shConsentText').textContent = d.consent_text;
+  const rows = d.export_words.filter(w => w.own + w.merged > 0);
+  $('#shExport').innerHTML = rows.length ? `<tr><th>단어</th><th class="num">내 클립</th><th class="num">합친 클립</th></tr>` +
+    rows.map(w => `<tr><td>${esc(w.name)} <span class="muted small">(${esc(w.vocab_id)})</span></td><td class="num">${w.own}</td><td class="num">${w.merged}</td></tr>`).join('')
+    : `<tr><td class="muted">아직 내보낼 클립이 없어요.</td></tr>`;
+  $('#shExcluded').textContent = d.excluded.length ? '50개 목록에 없어서 빠지는 단어: ' + d.excluded.map(w => `${w.name}(${w.clips})`).join(', ') : '';
+  $('#shPool').innerHTML = d.pool.length ? `<tr><th>임시 ID</th><th class="num">클립</th><th class="num">단어</th><th></th></tr>` +
+    d.pool.map(p => `<tr><td>${esc(p.id)}</td><td class="num">${p.clips}</td><td class="num">${p.words}</td><td><button class="b sm red" data-rm="${esc(p.id)}">이 ID 클립 삭제</button></td></tr>`).join('')
+    : `<tr><td class="muted">아직 합친 데이터가 없어요.</td></tr>`;
+  document.querySelectorAll('#shPool [data-rm]').forEach(b => b.onclick = run(async () => {
+    if (!confirm(`${b.dataset.rm} 의 클립을 모두 지울까요? 바로 지워지고 되돌릴 수 없어요.`)) return;
+    const r = await api('/api/share/remove', {contributor: b.dataset.rm});
+    toast(`${r.deleted}개 지웠어요.`, true); await loadShare();
+  }));
+}
+$('#shConsent').onchange = () => $('#btnExport').disabled = !$('#shConsent').checked;
+$('#btnShId').onclick = run(async () => { const r = await api('/api/share/id', {id: $('#shId').value}); $('#shId').value = r.me; toast('임시 ID를 저장했어요.', true); });
+$('#btnExport').onclick = run(async () => {
+  const btn = $('#btnExport'); btn.disabled = true; btn.textContent = '만드는 중…';
+  try {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 120000);
+    const r = await fetch('/api/export?consent=1', {cache: 'no-store', signal: ctl.signal}).finally(() => clearTimeout(timer));
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || ('HTTP ' + r.status));
+    const name = (/filename="([^"]+)"/.exec(r.headers.get('Content-Disposition') || '') || [])[1] || 'signdata.zip';
+    const url = URL.createObjectURL(await r.blob()), a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    toast(name + ' 을 내려받았어요. 슬랙으로 보내 주세요.', true);
+  } finally { btn.textContent = 'zip 내려받기'; btn.disabled = !$('#shConsent').checked; }
+});
+$('#btnMerge').onclick = () => { $('#shFolder').value = ''; $('#shFolder').click(); };
+$('#shFolder').onchange = run(async () => {
+  const files = [...$('#shFolder').files].filter(f => /\.zip$/i.test(f.name));
+  if (!files.length) { toast('고른 폴더에 zip 파일이 없어요.'); return; }
+  const rows = [], msg = $('#shMergeMsg');
+  let added = 0;
+  for (const [i, f] of files.entries()) {
+    msg.textContent = `합치는 중… ${i + 1}/${files.length} ${f.name}`;
+    try {
+      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 120000);
+      const r = await fetch('/api/merge?name=' + encodeURIComponent(f.name), {method: 'POST', body: f, signal: ctl.signal}).finally(() => clearTimeout(timer));
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+      added += j.added;
+      rows.push(`<tr><td>${esc(f.name)}</td><td>${esc(j.contributor)}</td><td class="num good">${j.added}</td><td class="num">${j.duplicate}</td><td class="num ${j.rejected ? 'bad' : ''}">${j.rejected}</td><td class="small">${j.new_words.length ? '새 단어: ' + esc(j.new_words.join(', ')) : ''}</td></tr>`);
+    } catch (e) {
+      rows.push(`<tr><td>${esc(f.name)}</td><td colspan="5" class="bad small">${esc(e.name === 'AbortError' ? '서버 응답이 없어요.' : e.message)}</td></tr>`);
+    }
+    $('#shMergeTable').innerHTML = `<tr><th>파일</th><th>보낸 사람</th><th class="num">추가</th><th class="num">중복</th><th class="num">거부</th><th></th></tr>` + rows.join('');
+  }
+  msg.textContent = `zip ${files.length}개에서 클립 ${added}개를 더했어요.`;
+  await loadWords(); await loadShare();
+});
 
 // ---------------------------------------------------------------- quit screen (shown in every open tab)
 // [종료 규칙 - 바꾸지 말 것] README.md "종료 규칙" 참고

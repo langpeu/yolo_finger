@@ -18,6 +18,8 @@ MODEL_PATH = os.path.join(DATA_ROOT, 'sign_model.pt')
 WORDS_PATH = os.path.join(DATA_ROOT, 'words.json')
 SETTINGS_PATH = os.path.join(DATA_ROOT, 'settings.json')
 HISTORY_PATH = os.path.join(DATA_ROOT, 'train_history.json')
+CONTRIB_PATH = os.path.join(DATA_ROOT, 'contributor.json')   # this PC's temporary contributor ID for sharing
+VOCAB_PATH = os.path.join(APP_DIR, 'vocab.json')           # shared 50-word list (in git)
 HAND_MODEL = os.path.join(MODELS_DIR, 'hand_landmarker.task')
 POSE_MODEL = os.path.join(MODELS_DIR, 'yolo11n-pose.pt')
 
@@ -49,7 +51,9 @@ os.chdir(MODELS_DIR)          # YOLO downloads its model file into the current f
 HAND_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task'
 FONT_PATH = 'C:/Windows/Fonts/malgun.ttf'
 WORD_ID_RE = re.compile(r'^[a-z0-9_]{1,32}$')
-CLIP_RE = re.compile(r'^[0-9]{6,20}\.(npz|npy)$')
+# own clip: <time ms>.npz   merged clip from another person: <contributor ID>__<content hash>.npz
+CLIP_RE = re.compile(r'^([0-9]{6,20}\.(npz|npy)|[a-z0-9-]{2,24}__[0-9a-f]{16}\.npz)$')
+CONTRIB_RE = re.compile(r'^[a-z0-9-]{2,24}$')
 
 # ---------------------------------------------------------------- settings
 DEFAULT_SETTINGS = {
@@ -221,6 +225,11 @@ def clip_files(word_id):
     if not os.path.isdir(d):
         return []
     return sorted(f for f in os.listdir(d) if CLIP_RE.match(f))
+
+
+def clip_contributor(fname):
+    """None for your own clips, else the contributor ID of a merged clip"""
+    return fname.split('__', 1)[0] if '__' in fname else None
 
 
 def load_clip(word_id, fname):

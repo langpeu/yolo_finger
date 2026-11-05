@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from sign_common import (load_words, load_settings, clip_files, load_clip, fit_window, resample, hand_ratio,
                          add_shape_features, SignNet, HAND_BASE, FULL_DIM, MODEL_PATH, HISTORY_PATH,
-                         _read_json, _write_json)
+                         _read_json, _write_json, clip_contributor)
 
 MIN_CLIPS = 3        # a word needs at least this many clips to be trained
 N_WARP = 4           # speed/timing-varied copies per real clip
@@ -207,6 +207,7 @@ def train_model(log=print, progress=None, stop=None):
     torch.manual_seed(0)
 
     clips, counts, hands, skipped = {}, {}, {}, []
+    people = {}                                   # word -> {contributor: clips}; '나' = my own recordings
     for w in words:
         files = clip_files(w['id'])
         if len(files) < MIN_CLIPS:
@@ -217,13 +218,18 @@ def train_model(log=print, progress=None, stop=None):
         for f in files:
             seq, sec = load_clip(w['id'], f)
             lst.append(fit_window(seq, sec, s['window_sec'], L))
+            who = clip_contributor(f) or '나'
+            people.setdefault(w['id'], {})
+            people[w['id']][who] = people[w['id']].get(who, 0) + 1
         clips[w['id']] = lst
         counts[w['id']] = len(lst)
         hands[w['id']] = float(np.mean([hand_ratio(c) for c in lst]))
     names = {w['id']: w['name'] for w in words}
     log(f'window {s["window_sec"]:.1f}s / {L} frames, epochs {int(s["epochs"])}')
     for k in clips:
-        log(f'  {names[k]} ({k}): {counts[k]} clips, hands visible {hands[k] * 100:.0f}%')
+        log(f'  {names[k]} ({k}): {counts[k]} clips, hands visible {hands[k] * 100:.0f}%, people {len(people[k])}')
+    everyone = sorted({p for k in clips for p in people[k]})
+    log(f'  contributors: {len(everyone)} (' + ', '.join(everyone) + ')')
     if skipped:
         log(f'  skipped (fewer than {MIN_CLIPS} clips): ' + ', '.join(skipped))
     if 'none' not in clips:
@@ -283,12 +289,15 @@ def train_model(log=print, progress=None, stop=None):
     X, y = _augment(clips, labels, none_i, L, rng, log)
     model = _fit(X, y, len(labels), int(s['epochs']), device, log, progress, stop, 0.45, 1.0)
     torch.save({'state': model.state_dict(), 'labels': labels, 'dim': FULL_DIM, 'seq_len': L,
-                'window_sec': float(s['window_sec']), 'hidden': HIDDEN}, MODEL_PATH)
+                'window_sec': float(s['window_sec']), 'hidden': HIDDEN,
+                'contributors': {l: people[l] for l in labels}}, MODEL_PATH)
     result = {
         'time': time.strftime('%Y-%m-%d %H:%M:%S'),
         'labels': labels,
         'names': {l: names[l] for l in labels},
         'counts': {l: counts[l] for l in labels},
+        'contributors': {l: people[l] for l in labels},
+        'people': len(everyone),
         'hands': {l: hands[l] for l in labels},
         'val_acc': val_acc,
         'per_word': per_word,
