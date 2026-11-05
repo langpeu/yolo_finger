@@ -254,6 +254,7 @@ class Worker(threading.Thread):
                     'probs': None if rg.probs is None else [round(float(p), 4) for p in rg.probs],
                     'showing': rg.showing(now), 'hand_ratio': rg.hand_ratio, 'peak': rg.peak(),
                     'history': rg.history[:10], 'thresh': s['thresh'], 'min_hand': s['min_hand'],
+                    'people': {l: word_people(l, getattr(rg, 'people', {})) for l in rg.labels if l != 'none'},
                 }
             return {
                 'status': self.status, 'error': self.error, 'mode': self.mode, 'fake': FAKE,
@@ -323,6 +324,23 @@ def clip_ratio(word_id, fname):
         r = sc.hand_ratio(sc.load_clip(word_id, fname)[0])
         remember_ratio(word_id, fname, r)
     return r
+
+
+def word_people(word_id, model_people):
+    """who gave data for a word, most clips first: [[ID, clips], ...]. From the trained model when it recorded it,
+    otherwise from the clip files (older models). My own clips are shown with my temporary ID."""
+    me = sign_share.my_id()
+    counts = model_people.get(word_id)
+    if not counts:
+        counts = {}
+        for f in sc.clip_files(word_id):
+            who = sc.clip_contributor(f) or '나'
+            counts[who] = counts.get(who, 0) + 1
+    out = {}
+    for who, n in counts.items():
+        k = me if who == '나' else who
+        out[k] = out.get(k, 0) + int(n)
+    return sorted(([k, n] for k, n in out.items()), key=lambda x: (-x[1], x[0]))
 
 
 def words_view():

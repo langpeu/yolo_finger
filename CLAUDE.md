@@ -38,7 +38,7 @@
 ### 남은 일 (2026-11-05 기준)
 - 브라우저 최대화 시 FPS 저하가 `keep_full_speed()` 로 나아졌는지 사용자 확인 받기. 안 나으면 줄어든 게 '처리 FPS'(서버)인지 영상만 끊기는지(브라우저) 먼저 구분.
 - 데이터 공유 기능을 사용자 PC에서 실제로 시험 받기 (내보내기 → 다른 PC에서 합치기 → 학습).
-- 실시간 인식 화면에 단어와 기여자 표시: 사용자는 원함. 방식(단어별 기여자 목록 / 가장 비슷한 클립의 기여자) 답을 아직 못 받음. 모델 파일에 `contributors` 는 이미 저장됨.
+- (선택) 실시간 인식에서 '가장 비슷한 클립의 기여자' 보여주기는 아직 안 함 (지금은 단어별 기여자 목록).
 - 단어마다 한국수어사전 링크 (vocab.json 에 넣기).
 - 사람 단위 검증(기여자를 통째로 떼어 정확도 재기).
 - 엄마(mom) 인식 조정: 지금은 잘 안 잡힌다. 사용자에게 실시간 인식의 "최근 3초 최고" 값을 받아 보고,
@@ -55,6 +55,7 @@
 - 개발 플랜 문서: https://claude.ai/artifact/3CXA1qF5YrKkWZig9ruREg
 
 ### 최근에 한 일
+- 실시간 인식에 기여자 표시: 인식된 단어 아래와 최근 인식 기록에 `데이터: ID 클립수 · ...` (클립 많은 순, 4명 넘으면 '외 N명'). 모델 파일 `contributors` 를 쓰고, 없는 옛 모델이면 지금 클립 파일로 계산. 내 클립은 내 임시 ID로 표시. `/api/state` live.people.
 - 전체 초기화 버튼(단어·클립 탭 맨 아래, "초기화" 입력해야 활성): `sc.reset_dataset()` 이 clips·words.json·sign_model.pt·train_history.json·deleted_clips.json 삭제, contributor.json·settings.json 유지. POST `/api/reset {confirm:'초기화'}`, 학습 중엔 거부.
 - 개인 단어 ID 충돌: 개인 단어 = (만든 사람 origin, 원래 ID base). 같은 것끼리만 합치고, ID만 같은 다른 사람 단어는 들어온 순서대로 `base_01`, `base_02` 로 새로 추가 (이름 = `원래이름 (만든사람ID)`). words.json 에 origin·base·orig_name 저장, manifest 개인 단어에 origin·base·원래 이름.
 - 단어 추가: 공유 단어 50개를 눌러 추가(ID·이름·길이 고정, 이미 추가한 건 ✓). 개인 단어는 공유 ID·별칭(cups)·none·이미 있는 ID와 겹치면 막음. 단어 목록에 공유/개인 표시. GET `/api/vocab`, POST `/api/words/add {vocab}`.

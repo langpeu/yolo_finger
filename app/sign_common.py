@@ -534,7 +534,7 @@ class Recognizer:
             self.history = []
 
     def reload(self):
-        model, labels, error = None, [], None
+        model, labels, error, people = None, [], None, {}
         window_sec, L = 4.0, 48
         if not os.path.exists(MODEL_PATH):
             error = '학습된 모델이 없어요. 먼저 학습을 실행해 주세요.'
@@ -548,10 +548,11 @@ class Recognizer:
                 model.eval()
                 labels = list(ck['labels'])
                 window_sec, L = float(ck.get('window_sec', 4.0)), int(ck.get('seq_len', 48))
+                people = ck.get('contributors') or {}      # word -> {contributor ID or '나': clips} (newer models)
             except Exception as e:  # noqa: BLE001
                 model, error = None, f'모델을 불러오지 못했어요. 다시 학습해 주세요. ({e})'
         with self._lk:
-            self.model, self.labels, self.error = model, labels, error
+            self.model, self.labels, self.error, self.people = model, labels, error, people
             self.window_sec, self.L = window_sec, L
         self.reset()
 

@@ -208,6 +208,7 @@ main>*{min-width:0}
     <div class="tab" id="tab-live">
       <div id="liveErr" class="bad small"></div>
       <div id="liveBig" class="big muted">…</div>
+      <div id="liveWho" class="small muted" style="text-align:center;min-height:18px;margin:-4px 0 8px"></div>
       <div id="liveBars"></div>
       <div class="small muted">최근 3초 최고 확률 (노란 선 = 기준)</div>
       <div class="bar" id="peakBar"><i></i><u></u><b></b></div>
@@ -535,15 +536,23 @@ function renderState(s) {
   if (TAB === 'live') {
     const big = $('#liveBig');
     big.textContent = L.showing ? nameOf(L.showing) : '…'; big.className = 'big' + (L.showing ? ' hit' : ' muted');
+    $('#liveWho').textContent = L.showing ? whoText(L.people, L.showing, 4) : '';
     if (L.probs) {
       $('#liveBars').innerHTML = L.labels.map((l, i) => `<div class="small">${esc(nameOf(l))}</div>
         <div class="bar ${l === 'none' ? 'none' : ''}"><i style="width:${Math.round(L.probs[i] * 100)}%"></i><b>${pct(L.probs[i])}</b></div>`).join('');
     } else $('#liveBars').innerHTML = L.model_ok ? '<div class="muted small">동작을 모으는 중…</div>' : '';
     setBar($('#peakBar'), L.peak || 0, L.thresh || 0, `${pct(L.peak)}  (기준 ${pct(L.thresh)})`);
     setBar($('#handBar'), L.hand_ratio || 0, L.min_hand || 0, pct(L.hand_ratio), (L.hand_ratio || 0) < (L.min_hand || 0) ? 'none' : '');
-    $('#liveHist').innerHTML = (L.history || []).map(h => `<li><span class="muted">${esc(h.time)}</span><b>${esc(nameOf(h.word))}</b><span class="muted">${pct(h.prob)}</span></li>`).join('') || '<li class="muted">아직 없어요</li>';
+    $('#liveHist').innerHTML = (L.history || []).map(h => `<li><span class="muted">${esc(h.time)}</span><b>${esc(nameOf(h.word))}</b><span class="muted">${pct(h.prob)}</span><span class="muted small">${esc(whoText(L.people, h.word, 2))}</span></li>`).join('') || '<li class="muted">아직 없어요</li>';
   }
   if (TAB === 'train' && (s.train.running || loadTrain._was)) loadTrain().catch(() => {});
+}
+// who gave data for a word: "데이터: u-2e29f01c 18 · alice 8 외 2명"
+function whoText(people, word, max) {
+  const p = (people || {})[word] || [];
+  if (!p.length) return '';
+  const head = p.slice(0, max).map(([id, n]) => `${id} ${n}`).join(' · ');
+  return '데이터: ' + head + (p.length > max ? ` 외 ${p.length - max}명` : '');
 }
 async function poll() {
   if (QUITTING) return;
