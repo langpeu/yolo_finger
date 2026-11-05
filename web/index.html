@@ -36,6 +36,11 @@ main{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(360px,1fr);align
 .vocab .vc{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .vocab .vc>span{min-width:92px;color:var(--muted);font-size:12px}
 .vocab button.on{opacity:.55;cursor:default}
+.vocab button.sel{border-color:var(--accent);color:var(--text);font-weight:700}
+.demobox{max-width:560px;margin:0 auto}
+.demotitle{text-align:center;font-size:28px;font-weight:800;margin:4px 0 6px}
+#demoCv{display:block;width:100%;height:auto;background:#0e1116;border-radius:10px;border:1px solid var(--line)}
+#demoSeek{width:100%;margin-top:8px}
 .tabs button{flex:1;min-width:84px;background:none;border:0;color:var(--muted);padding:11px 6px;font:inherit;cursor:pointer;border-bottom:2px solid transparent}
 .tabs button.on{color:var(--text);border-bottom-color:var(--accent);font-weight:700}
 .tab{display:none;padding:14px}
@@ -169,6 +174,7 @@ main>*{min-width:0}
     <nav class="tabs" id="tabs">
       <button data-tab="record" class="on">녹화</button>
       <button data-tab="live">실시간 인식</button>
+      <button data-tab="demo">수어 보기</button>
       <button data-tab="train">학습</button>
       <button data-tab="words">단어·클립</button>
       <button data-tab="share">데이터 공유</button>
@@ -181,6 +187,7 @@ main>*{min-width:0}
       <div class="row">
         <label class="f">녹화할 단어<select id="recWord"></select></label>
         <span id="recInfo" class="muted small"></span>
+        <button class="b sm" id="btnRecDemo" title="이 단어를 어떻게 하는지 애니메이션으로 봐요">동작 보기</button>
       </div>
       <div class="row recbtns">
         <button class="b pri" id="btnOnce">1회 녹화 <span class="kbd">Space</span></button>
@@ -216,6 +223,24 @@ main>*{min-width:0}
       <div class="bar" id="handBar"><i></i><u></u><b></b></div>
       <h3>최근 인식</h3>
       <ul class="hist" id="liveHist"></ul>
+    </div>
+
+    <!-- ===================== 수어 보기 -->
+    <div class="tab" id="tab-demo">
+      <div class="small muted">녹화된 클립으로 단어마다 어떤 동작인지 보여줘요. 여러 클립 중 가장 전형적인 동작을 먼저 골라요. 거울처럼 보여서, 화면을 보며 그대로 따라 하면 돼요.</div>
+      <div id="demoWords" class="vocab" style="margin:10px 0"></div>
+      <div class="demobox">
+        <div id="demoTitle" class="demotitle"></div>
+        <canvas id="demoCv" width="640" height="480"></canvas>
+        <input type="range" id="demoSeek" min="0" max="0" value="0" step="1">
+        <div class="row" style="justify-content:center;margin-top:6px">
+          <button class="b sm" id="demoPlay">⏸ 멈춤</button>
+          <button class="b sm" id="demoSlow">느리게 0.5x</button>
+          <button class="b sm" id="demoNext">다른 예시 ▶</button>
+        </div>
+        <div id="demoInfo" class="small muted" style="text-align:center;margin-top:6px"></div>
+        <div class="small muted" style="text-align:center;margin-top:4px">손가락 색: <span style="color:#ff6b6b">엄지</span> · <span style="color:#ffb347">검지</span> · <span style="color:#ffe66d">중지</span> · <span style="color:#7dd87d">약지</span> · <span style="color:#6bc5ff">새끼</span> · 옅은 선 = 손이 지나온 길</div>
+      </div>
     </div>
 
     <!-- ===================== 학습 -->
@@ -360,6 +385,7 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = run(async () 
   if (TAB === 'settings') await loadSettings();
   if (TAB === 'share') await loadShare();
   if (TAB === 'history') await loadHistory();
+  if (TAB === 'demo') await loadDemoWords(); else demoStop();
 }));
 
 // ---------------------------------------------------------------- words
@@ -473,6 +499,108 @@ async function playClip(file) {
     i++; if (i >= n) { clearInterval(playTimer); }
   }, Math.max(30, d.sec * 1000 / n));
 }
+
+// ---------------------------------------------------------------- sign demo (animation from the recorded clips)
+const FINGER_COL = ['#ff6b6b', '#ffb347', '#ffe66d', '#7dd87d', '#6bc5ff'];
+const DEMO = {data: null, idx: 0, t: 0, speed: 1, playing: true, raf: 0, last: 0, word: null, view: null};
+async function loadDemoWords() {
+  const words = await api('/api/words');
+  WORDS = words;
+  const list = words.filter(w => w.id !== 'none');
+  if (!list.length) { $('#demoWords').innerHTML = '<span class="muted small">단어가 없어요. 단어·클립 탭에서 추가하고 녹화해 주세요.</span>'; return; }
+  $('#demoWords').innerHTML = '<div class="vc">' + list.map(w => `<button class="b sm" data-dw="${esc(w.id)}" ${w.clips ? '' : 'disabled title="녹화된 클립이 없어요"'}>${esc(w.name)}${w.clips ? '' : ' (0)'}</button>`).join('') + '</div>';
+  document.querySelectorAll('#demoWords [data-dw]').forEach(b => b.onclick = run(() => showDemo(b.dataset.dw)));
+  const first = DEMO.word && list.some(w => w.id === DEMO.word && w.clips) ? DEMO.word : (list.find(w => w.clips) || {}).id;
+  if (first) await showDemo(first); else { $('#demoTitle').textContent = ''; $('#demoInfo').textContent = '아직 녹화된 클립이 없어요.'; }
+}
+async function showDemo(word) {
+  DEMO.word = word;
+  document.querySelectorAll('#demoWords [data-dw]').forEach(b => b.classList.toggle('sel', b.dataset.dw === word));
+  const d = await api('/api/demo?word=' + encodeURIComponent(word), undefined, 30000);
+  DEMO.data = d; DEMO.idx = 0;
+  $('#demoTitle').textContent = d.name;
+  if (!d.clips.length) { demoStop(); clearDemo(); $('#demoInfo').textContent = d.total ? '손이 잘 보인 클립이 없어서 보여줄 수 없어요.' : '아직 녹화된 클립이 없어요.'; return; }
+  startClip();
+}
+function startClip() {
+  const c = DEMO.data.clips[DEMO.idx], HB = DEMO.data.hand_base;
+  DEMO.t = 0; DEMO.view = demoView(c.frames, HB);
+  $('#demoSeek').max = c.frames.length - 1;
+  $('#demoInfo').textContent = `${DEMO.idx === 0 ? '대표 동작' : '다른 예시 ' + DEMO.idx} · ${c.sec}초 · 녹화: ${c.who} · 클립 ${DEMO.data.total}개 중 손이 잘 보인 ${DEMO.data.usable}개에서 고름`;
+  $('#demoNext').disabled = DEMO.data.clips.length < 2;
+  DEMO.playing = true; $('#demoPlay').textContent = '⏸ 멈춤';
+  cancelAnimationFrame(DEMO.raf); DEMO.last = performance.now(); DEMO.raf = requestAnimationFrame(demoTick);
+}
+function demoStop() { cancelAnimationFrame(DEMO.raf); DEMO.raf = 0; }
+function clearDemo() { const g = $('#demoCv').getContext('2d'); g.clearRect(0, 0, 640, 480); }
+function demoView(frames, HB) {         // fit every point of the clip into the canvas
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  const add = (x, y) => { if (x === 0 && y === 0) return; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); };
+  frames.forEach(f => { for (let k = 0; k < 7; k++) add(f[2*k], f[2*k+1]); [0, 1].forEach(s => { if (f[HB+84+s] >= .5) for (let k = 0; k < 21; k++) add(f[HB+s*42+2*k], f[HB+s*42+2*k+1]); }); });
+  y1 = Math.max(y1, 1.6);                                    // leave room for the body
+  const pad = .35, w = x1 - x0 + 2 * pad, h = y1 - y0 + 2 * pad, S = Math.min(640 / w, 480 / h);
+  return {S, ox: 320 - (x0 + x1) / 2 * S, oy: 240 - (y0 + y1) / 2 * S};
+}
+function demoTick(now) {
+  const c = DEMO.data && DEMO.data.clips[DEMO.idx];
+  if (!c || TAB !== 'demo') { DEMO.raf = 0; return; }
+  const n = c.frames.length, fps = n / c.sec;
+  if (DEMO.playing) {
+    DEMO.t += Math.max(0, Math.min(0.25, (now - DEMO.last) / 1000)) * fps * DEMO.speed;
+    if (DEMO.t >= n + fps * 0.7) DEMO.t = 0;               // short pause at the end, then again
+  }
+  DEMO.last = now;
+  const i = Math.max(0, Math.min(n - 1, Math.floor(DEMO.t)));
+  $('#demoSeek').value = i;
+  drawFigure($('#demoCv').getContext('2d'), c.frames, i, DEMO.data.hand_base, DEMO.view);
+  DEMO.raf = requestAnimationFrame(demoTick);
+}
+function drawFigure(g, frames, i, HB, v) {
+  const f = frames[i], P = (x, y) => [v.ox + x * v.S, v.oy + y * v.S], has = p => p[0] !== 0 || p[1] !== 0;
+  const pose = []; for (let k = 0; k < 7; k++) pose.push([f[2*k], f[2*k+1]]);
+  const hand = s => { const h = []; for (let k = 0; k < 21; k++) h.push([f[HB+s*42+2*k], f[HB+s*42+2*k+1]]); return h; };
+  g.clearRect(0, 0, 640, 480); g.lineCap = 'round'; g.lineJoin = 'round';
+  const line = (a, b, w, col) => { g.lineWidth = w; g.strokeStyle = col; g.beginPath(); g.moveTo(...P(...a)); g.lineTo(...P(...b)); g.stroke(); };
+  const [nose, ls, rs, le, re, lw, rw] = pose, sw = has(ls) && has(rs) ? Math.hypot(ls[0] - rs[0], ls[1] - rs[1]) : 1;
+  // body: torso, neck, head
+  if (has(ls) && has(rs)) {
+    g.fillStyle = '#2a3342'; g.beginPath();
+    g.moveTo(...P(ls[0], ls[1])); g.lineTo(...P(rs[0], rs[1])); g.lineTo(...P(rs[0] * .8, rs[1] + 1.6)); g.lineTo(...P(ls[0] * .8, ls[1] + 1.6)); g.closePath(); g.fill();
+    line(ls, rs, 10, '#55627a');
+    if (has(nose)) line([(ls[0] + rs[0]) / 2, (ls[1] + rs[1]) / 2], [nose[0], nose[1] + .25 * sw], 9, '#55627a');
+  }
+  if (has(nose)) { g.fillStyle = '#3a4658'; g.strokeStyle = '#7d8aa0'; g.lineWidth = 2; g.beginPath(); g.arc(...P(...nose), .34 * sw * v.S, 0, 7); g.fill(); g.stroke(); }
+  // wrist trails: where each hand has been over the last second
+  const back = Math.max(0, i - 12);
+  [[5, '#ff6bd6'], [6, '#4fd1ff']].forEach(([k, col]) => {
+    g.lineWidth = 3; g.strokeStyle = col; g.globalAlpha = .28; g.beginPath(); let started = false;
+    for (let t = back; t <= i; t++) { const p = [frames[t][2*k], frames[t][2*k+1]]; if (!has(p)) continue; started ? g.lineTo(...P(...p)) : g.moveTo(...P(...p)); started = true; }
+    g.stroke(); g.globalAlpha = 1;
+  });
+  // arms
+  [[ls, le, lw], [rs, re, rw]].forEach(([a, b, c]) => { if (has(a) && has(b)) line(a, b, 9, '#8fa3bf'); if (has(b) && has(c)) line(b, c, 8, '#8fa3bf'); });
+  // hands: palm + coloured fingers
+  [0, 1].forEach(s => {
+    if (f[HB + 84 + s] < .5) return;
+    const h = hand(s);
+    g.fillStyle = s ? 'rgba(79,209,255,.25)' : 'rgba(255,107,214,.25)'; g.beginPath();
+    [0, 5, 9, 13, 17].forEach((k, j) => j ? g.lineTo(...P(...h[k])) : g.moveTo(...P(...h[k]))); g.closePath(); g.fill();
+    line(h[0], h[17], 3, s ? '#4fd1ff' : '#ff6bd6');
+    for (let fi = 0; fi < 5; fi++) {
+      const pts = fi === 0 ? [0, 1, 2, 3, 4] : [0, fi * 4 + 1, fi * 4 + 2, fi * 4 + 3, fi * 4 + 4];
+      for (let j = 1; j < pts.length; j++) line(h[pts[j - 1]], h[pts[j]], 4, FINGER_COL[fi]);
+      g.fillStyle = FINGER_COL[fi]; g.beginPath(); g.arc(...P(...h[pts[pts.length - 1]]), 4.5, 0, 7); g.fill();
+    }
+  });
+}
+$('#btnRecDemo').onclick = run(async () => {
+  DEMO.word = $('#recWord').value;
+  document.querySelector('#tabs button[data-tab=demo]').click();
+});
+$('#demoPlay').onclick = () => { DEMO.playing = !DEMO.playing; $('#demoPlay').textContent = DEMO.playing ? '⏸ 멈춤' : '▶ 재생'; };
+$('#demoSlow').onclick = () => { DEMO.speed = DEMO.speed === 1 ? .5 : 1; $('#demoSlow').textContent = DEMO.speed === 1 ? '느리게 0.5x' : '보통 속도 1x'; };
+$('#demoNext').onclick = () => { if (!DEMO.data || DEMO.data.clips.length < 2) return; DEMO.idx = (DEMO.idx + 1) % DEMO.data.clips.length; startClip(); };
+$('#demoSeek').oninput = () => { DEMO.t = +$('#demoSeek').value; DEMO.playing = false; $('#demoPlay').textContent = '▶ 재생'; };
 
 // ---------------------------------------------------------------- recording
 const recStart = auto => run(async () => {

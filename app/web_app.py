@@ -395,6 +395,77 @@ def clip_data(word_id, fname):
     return {'sec': sec, 'hand_base': sc.HAND_BASE, 'frames': np.round(seq.astype(np.float64), 3).tolist()}
 
 
+_DEMO_CACHE = {}        # word -> (file list, ranked clip files)
+
+
+def _fill_hands(seq):
+    """for display: a hand that disappears for a few frames keeps its last position (no flicker)"""
+    seq = seq.copy()
+    hb = sc.HAND_BASE
+    for s in (0, 1):
+        last, gap = None, 0
+        for t in range(len(seq)):
+            if seq[t, hb + 84 + s] >= 0.5:
+                last, gap = seq[t, hb + s * 42: hb + s * 42 + 42].copy(), 0
+            elif last is not None and gap < 4:
+                seq[t, hb + s * 42: hb + s * 42 + 42] = last
+                seq[t, hb + 84 + s] = 1.0
+                gap += 1
+    return seq
+
+
+def _smooth(seq):
+    """light 3-frame smoothing of the coordinates for a calmer animation (flags untouched)"""
+    out = seq.copy()
+    n = sc.HAND_BASE + 84
+    if len(seq) >= 3:
+        mid = (seq[:-2, :n] + seq[1:-1, :n] * 2 + seq[2:, :n]) / 4
+        both = (seq[:-2, :n] != 0) & (seq[1:-1, :n] != 0) & (seq[2:, :n] != 0)
+        out[1:-1, :n] = np.where(both, mid, seq[1:-1, :n])
+    return out
+
+
+def demo_view(word_id, k=5):
+    """how to sign a word, from the recorded clips: the most typical clip first (the one closest to all the others),
+    then the next closest ones. Clips where the hands were mostly not seen are skipped."""
+    w = sc.get_word(word_id)
+    if w is None:
+        raise ValueError('없는 단어예요.')
+    files = sc.clip_files(word_id)
+    if word_id == 'none' or not files:
+        return {'word': word_id, 'name': w['name'], 'clips': [], 'total': len(files)}
+    cached = _DEMO_CACHE.get(word_id)
+    if cached and cached[0] == files:
+        ranked = cached[1]
+    else:
+        good, vecs = [], []
+        for f in files:
+            try:
+                seq, sec = sc.load_clip(word_id, f)
+            except Exception:  # noqa: BLE001
+                continue
+            if seq.ndim != 2 or seq.shape[1] != sc.FEAT_DIM or sc.hand_ratio(seq) < LOW_HAND:
+                continue
+            good.append(f)
+            vecs.append(sc.resample(seq, 24)[:, :sc.HAND_BASE + 84].reshape(-1))
+        if not good:
+            ranked = []
+        else:
+            V = np.stack(vecs)
+            d = np.sqrt(((V[:, None, :] - V[None, :, :]) ** 2).mean(-1))
+            ranked = [good[i] for i in np.argsort(d.sum(1))]   # most typical first
+        _DEMO_CACHE[word_id] = (files, ranked)
+    me = sign_share.my_id()
+    out = []
+    for f in ranked[:k]:
+        seq, sec = sc.load_clip(word_id, f)
+        seq = _smooth(_fill_hands(seq))
+        out.append({'file': f, 'sec': round(float(sec), 2), 'who': sc.clip_contributor(f) or me,
+                    'frames': np.round(seq.astype(np.float64), 3).tolist()})
+    return {'word': word_id, 'name': w['name'], 'clips': out, 'total': len(files), 'usable': len(ranked),
+            'hand_base': sc.HAND_BASE}
+
+
 def history_view():
     h = sc._read_json(sc.HISTORY_PATH, [])
     return h if isinstance(h, list) else []
@@ -466,6 +537,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, clips_view(q.get('word', '')))
             if u.path == '/api/clip':
                 return self._send(200, clip_data(q.get('word', ''), q.get('file', '')))
+            if u.path == '/api/demo':
+                return self._send(200, demo_view(q.get('word', '')))
             if u.path == '/api/train':
                 return self._send(200, {k: TRAIN[k] for k in ('running', 'progress', 'log', 'result', 'error')})
             if u.path == '/api/history':

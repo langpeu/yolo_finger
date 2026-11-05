@@ -55,6 +55,7 @@
 - 개발 플랜 문서: https://claude.ai/artifact/3CXA1qF5YrKkWZig9ruREg
 
 ### 최근에 한 일
+- 수어 보기 탭: 단어를 고르면 녹화 클립으로 사람 모양 애니메이션(몸·머리·팔, 손가락 색 구분, 손목이 지나온 길). GET `/api/demo?word=` 가 손 잘 보인 클립 중 가장 전형적인 것(다른 클립과 평균 거리가 가장 작은 클립)부터 5개, 화면용으로 손 빈칸 채우기·3프레임 부드럽게. 재생/멈춤, 0.5x, 다른 예시, 위치 막대. 녹화 탭에 '동작 보기' 버튼. 실제 데이터로는 사용자 확인 전.
 - 실시간 인식에 기여자 표시: 인식된 단어 아래와 최근 인식 기록에 `데이터: ID 클립수 · ...` (클립 많은 순, 4명 넘으면 '외 N명'). 모델 파일 `contributors` 를 쓰고, 없는 옛 모델이면 지금 클립 파일로 계산. 내 클립은 내 임시 ID로 표시. `/api/state` live.people.
 - 전체 초기화 버튼(단어·클립 탭 맨 아래, "초기화" 입력해야 활성): `sc.reset_dataset()` 이 clips·words.json·sign_model.pt·train_history.json·deleted_clips.json 삭제, contributor.json·settings.json 유지. POST `/api/reset {confirm:'초기화'}`, 학습 중엔 거부.
 - 개인 단어 ID 충돌: 개인 단어 = (만든 사람 origin, 원래 ID base). 같은 것끼리만 합치고, ID만 같은 다른 사람 단어는 들어온 순서대로 `base_01`, `base_02` 로 새로 추가 (이름 = `원래이름 (만든사람ID)`). words.json 에 origin·base·orig_name 저장, manifest 개인 단어에 origin·base·원래 이름.
@@ -106,7 +107,7 @@ README.md "종료 규칙"이 정한 방식을 유지한다. 사용자가 직접 
 | `app/sign_train.py` | 학습 `train_model(log, progress, stop)`. 기여자별 클립 수를 학습 기록과 모델 파일(`contributors`)에 남김 |
 | `app/sign_share.py` | 데이터 공유: 임시 ID, 내보내기 zip, 합치기(중복 검사), 기여자 클립 삭제 |
 | `app/vocab.json` | 공유 단어 50개 (+ none). 배고파·목말라·엄마·컵은 빼지 않는다. `cups` 는 `cup` 의 별칭 |
-| `web/index.html` | 웹페이지 전체 (반응형, 탭: 녹화 / 실시간 인식 / 학습 / 단어·클립 / 데이터 공유 / 설정 / 학습 기록) |
+| `web/index.html` | 웹페이지 전체 (반응형, 탭: 녹화 / 실시간 인식 / 수어 보기 / 학습 / 단어·클립 / 데이터 공유 / 설정 / 학습 기록) |
 
 - 프로젝트는 `C:\yolo_finger` 처럼 C 드라이브 바로 아래에 둔다. 문서·바탕 화면은 윈도우 "제어된 폴더 액세스"가 설치를 막는다.
 - `env_*/`, `data/`, `models/*` 는 git에서 제외된다. 옛 폴더 구조(루트의 sign_data 등)는 `_migrate_old_layout()` 이 data/, models/ 로 옮긴다.
@@ -116,7 +117,7 @@ README.md "종료 규칙"이 정한 방식을 유지한다. 사용자가 직접 
 - `models/yolo11n-pose.pt`, `models/hand_landmarker.task` (자동 다운로드)
 
 ## 웹 API (web_app.py)
-- GET: `/`, `/logo.png`, `/favicon.png`, `/frame.jpg?after=N` (한 장씩, 헤더 X-Frame-Id), `/api/state`, `/api/words`, `/api/clips`, `/api/clip`, `/api/train`, `/api/history`, `/api/settings`
+- GET: `/`, `/logo.png`, `/favicon.png`, `/frame.jpg?after=N` (한 장씩, 헤더 X-Frame-Id), `/api/state`, `/api/words`, `/api/clips`, `/api/clip`, `/api/demo?word=`, `/api/train`, `/api/history`, `/api/settings`
 - 데이터 공유: GET `/api/share`(현황), GET `/api/export?consent=1`(zip 내려받기), POST `/api/merge?name=` (본문 = zip 바이트), POST `/api/share/id`, `/api/share/remove`, `/api/share/unblock`, `/api/share/forget`
 - POST: `/api/reset`, `/api/words/add|update|delete`, `/api/clips/delete` (`{'deleted': n}`), `/api/record/start|stop`, `/api/mode`, `/api/train/start|stop`, `/api/settings`, `/api/shutdown`
 - 영상은 MJPEG 스트림 대신 `/frame.jpg` 를 한 장씩 가져온다 (브라우저의 사이트당 연결 6개 제한 때문). 탭이 안 보이면 멈춘다. 클라이언트 fetch에는 타임아웃이 있다.
